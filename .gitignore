@@ -1,0 +1,50 @@
+# --- Стандартные исключения для Python ---
+
+# Скомпилированные файлы и кэш
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Виртуальные окружения
+venv/
+env/
+.venv/
+
+# Файлы настроек IDE
+.vscode/
+.idea/
+
+# Файлы сборки и пакетов
+build/
+dist/
+*.egg-info/
+
+
+# --- Специфичные для проекта исключения ---
+
+# Лог-файлы
+*.log
+
+# Директории с данными. Обычно они слишком большие для Git.
+data/
+data_result/
+unpacked/
+
+# Директории и файлы с результатами анализов
+analysis_results/
+result_plink/
+result_merged.vcf
+result_merged.vcf.gz
+result_merged.vcf.gz.tbi
+
+# Исполняемые файлы сторонних программ
+plink/
+
+# Промежуточные файлы списка VCF
+vcf_file_list.txt
+
+# --- Jupyter Notebook ---
+
+# Контрольные точки Jupyter
+.ipynb_checkpoints
