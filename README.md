@@ -1,3 +1,16 @@
+## Команды проекта
+```bash
+make install # Установка зависимостей
+make run_pre # Запуск конвертации в vcf
+# и т.д
+```
+Из файла - Makefile, 
+или удобно с помощью GUI - расширения vscode-makefile-term
+
+## Настройки / Управление параметрами
+
+В файле .env
+
 ## Данные
 Референсный геном
 
@@ -11,25 +24,7 @@ data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_geno
 
 Сырые данные  data/raw
 
-## Получение нуклеотида из референса
-
-/opt/tools/samtools-1.16/samtools faidx /home/ermolaevd/bulls-vcf-pipeline/data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna NC_037328.1:776231-776231
-
->A
-
-/opt/tools/samtools-1.16/samtools faidx /home/ermolaevd/bulls-vcf-pipeline/data/old_reference/Bos_taurus.UMD3.1.dna.toplevel.fa 1:776231-776231
-
->T
-
 ## Запуск проекта
-`manage_project_files.py`
-
-Из zip архивов создаёт для файлов FinalReport архив формата .txt.gz в директории data/unpacked/
-
-`run.py`
-
-Результаты в data_result, в директории созданной для каждого .txt.gz архива, внутри .vcf файла для каждой коровы отдельно
-
 Список с путями ко всем файлам
 `find data_result -name '*.vcf' > vcf_file_list.txt`
 
@@ -74,4 +69,3 @@ plink/plink \
     --ld-window 99999 \
     --ld-window-r2 0.2 \
     --out /home/ermolaevd/bulls-vcf-pipeline/analysis_results/ld_analysis
-

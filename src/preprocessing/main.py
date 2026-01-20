@@ -1,28 +1,27 @@
 import pandas as pd
 import os
+from manage_project_files import process_archives
 import tools
 import pysam
 from pathlib import Path
+from dotenv import load_dotenv
 
 from tqdm import tqdm
 
+import logging
 
+
+logger = logging.getLogger(__name__)
 tqdm.pandas()  # подключить поддержку progress_apply
-
-
-path_to_data = os.path.join("data", "unpacked")
-all_data = os.listdir(path_to_data)
-# [4:5] - самый маленький файл
-# all_data = [all_data[-2]]
-# all_data = all_data[4:5]
+load_dotenv()
 
 
 def create_vcf_for_sample(sample_id, sample_df, name_file):
     """
     Создает VCF файл для одного образца(организма) на основе его данных в DataFrame.
     """
-    filepath = f"data_result/{name_file}/{sample_id}.vcf"
-    output_path = Path(f"data_result/{name_file}")
+    filepath = f"{os.getenv('PATH_VCF_SEP')}/{name_file}/{sample_id}.vcf"
+    output_path = Path(f"{os.getenv('PATH_VCF_SEP')}/{name_file}")
 
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -130,15 +129,15 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
             compression="gzip",
             engine="pyarrow",
         )
-        print(f"Запуск для файла {name_file}")
+        logger.info(f"Запуск для файла {name_file}")
 
         rdf = pd.merge(df, bovinehd_manifest_df, left_on="SNP Name", right_on="Name")
         rdf.drop(columns=["Name"], inplace=True)
 
-        print("Создание колонки REF")
+        logger.info("Создание колонки REF")
         rdf["REF"] = rdf.progress_apply(create_column_REF, axis=1)
 
-        print("Создание колонки ALT")
+        logger.info("Создание колонки ALT")
         rdf["ALT"] = rdf.progress_apply(create_column_ALT, axis=1)
         rdf = rdf[rdf["ALT"] != "DATA_ERROR"]
         rdf.columns = (
@@ -147,7 +146,7 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
 
         grouped_by_sample = rdf.groupby("Sample_ID")
 
-        print("Создание .vcf файла")
+        logger.info("Создание .vcf файла")
         for sample_id, sample_data in tqdm(
             grouped_by_sample, total=len(grouped_by_sample)
         ):
@@ -157,19 +156,41 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
 
     except Exception as e:
         # Возвращаем ошибку, чтобы увидеть ее в главном процессе
-        return f"Ошибка при обработке файла {name_file}: {e}"
+        logger.error(f"Ошибка при обработке файла {name_file}: {e}")
 
 
 if __name__ == "__main__":
-    print("Загрузка общего файла манифеста...")
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%H:%M:%S'
+    )
+
+    logger.info("Подготовка файлов...")
+    input_directory = os.getenv("PATH_TO_RAW")
+    output_directory = os.getenv("PATH_TO_PREPARED")
+    process_archives(input_directory, output_directory)
+
+
+    path_to_data = os.getenv("PATH_TO_PREPARED")
+    all_data = os.listdir(path_to_data)
+    # [4:5] - самый маленький файл
+    # all_data = [all_data[-2]]
+    # all_data = all_data[4:5]
+
+    logger.info("Загрузка общего файла манифеста...")
     bovinehd_manifest_df = pd.read_csv(
-        "data/manifest/BovineHD_B1.csv",
+        os.getenv("MANIFEST_PATH"),
         sep=",",
         header=7,
         skipfooter=24,
         usecols=["Name", "IlmnStrand", "SNP", "RefStrand"],
         engine="python",
     )
-    print(all_data)
+
+    logger.debug(all_data)
+    logger.info("Конвертация...")
     for file in tqdm(all_data, total=len(all_data)):
         process_file(file, path_to_data, bovinehd_manifest_df)

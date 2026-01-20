@@ -1,9 +1,13 @@
 import pysam
+from dotenv import load_dotenv
+import os
 
 # Путь к референсному геному
 # reference_genome_path = "data/old_reference/Bos_taurus.UMD3.1.dna.toplevel.fa"
 
-reference_genome_path = "data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna"
+load_dotenv()
+
+reference_genome_path = os.getenv("REFERENCE_GENOME_PATH")
 fasta_handle = pysam.FastaFile(reference_genome_path)
 
 
