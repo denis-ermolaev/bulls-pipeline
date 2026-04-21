@@ -6,6 +6,8 @@ import pysam
 from pathlib import Path
 from dotenv import load_dotenv
 
+from tools_bash import CMD
+
 from tqdm import tqdm
 
 import logging
@@ -22,6 +24,11 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
     """
     filepath = f"{os.getenv('PATH_VCF_SEP')}/{name_file}/{sample_id}.vcf"
     output_path = Path(f"{os.getenv('PATH_VCF_SEP')}/{name_file}")
+
+    test_mode = test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    if test_mode:
+        filepath = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}/{sample_id}.vcf"
+        output_path = Path(f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}")
 
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -47,7 +54,7 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
     for row in sample_df.itertuples():
         record = vcf_out.new_record(
             contig=str(row.Chr),
-            start=row.Position,  # VCF POS (1-based) -> pysam start (0-based)
+            start=row.Position - 1,  # VCF POS (1-based) -> pysam start (0-based)
             alleles=(row.REF, row.ALT),
             id=row.SNP_Name,
         )
@@ -56,24 +63,64 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
 
         # --- ОПРЕДЕЛЕНИЕ ГЕНОТИПА ---
         complementarity = {"A": "T", "T": "A", "C": "G", "G": "C"}
-        SNP = row.SNP.strip("[]").split("/")
+        SNP_A = row.SNP.strip("[]").split("/")[0]
+        SNP_B = row.SNP.strip("[]").split("/")[1]
         IlmnStrand = row.IlmnStrand
         RefStrand = row.RefStrand
         REF = row.REF
-
-        if IlmnStrand == "BOT":
-            SNP = SNP[::-1]
-        if RefStrand == "-":
-            SNP = [complementarity[SNP[0]], complementarity[SNP[1]]]
-        SNP = {"A": SNP[0], "B": SNP[1]}
+        alphabetical_order = ["A", "C", "G", "T"] # Правильный ?
 
         if row.Allele1_AB != "-" and row.Allele2_AB != "-":
-            allele1 = 0 if SNP[row.Allele1_AB] == REF else 1
-            allele2 = 0 if SNP[row.Allele2_AB] == REF else 1
-            # Сортируем для создания нефазированного генотипа (0/1)
-            # Т.к неизвестно какой от отца, а какой от матери
+            if f"{SNP_A}/{SNP_B}" not in ["A/T", "C/G", "T/A", "G/C"]:
+                if SNP_A == "A" or SNP_A == "T":
+                    allele_A = SNP_A
+                else:
+                    allele_B = SNP_A
+                if SNP_B == "C" or SNP_B == "G":
+                    allele_B = SNP_B
+                else:
+                    allele_A = SNP_B
+            elif f"{SNP_A}/{SNP_B}" in ["A/T", "C/G", "T/A", "G/C"]:
+                num_SNP_A = alphabetical_order.index(SNP_A) # 0, 1, 2, 3
+                num_SNP_B = alphabetical_order.index(SNP_B) # 0, 1, 2, 3
+
+                if IlmnStrand == "TOP":
+                    allele_A = SNP_A if num_SNP_A < num_SNP_B else SNP_B
+                    allele_B = SNP_A if allele_A != SNP_A else SNP_B
+                elif IlmnStrand == "BOT":
+                    allele_A = SNP_A if num_SNP_A > num_SNP_B else SNP_B
+                    allele_B = SNP_A if allele_A != SNP_A else SNP_B
+            if RefStrand == "-":
+                allele_A = complementarity[allele_A]
+                allele_B = complementarity[allele_B]
+            SNP_normal = {"A": allele_A, "B": allele_B}
+            allele1 = 0 if SNP_normal[row.Allele1_AB] == REF else 1
+            allele2 = 0 if SNP_normal[row.Allele2_AB] == REF else 1
             gt = tuple(sorted((allele1, allele2)))
-            record.samples[sample_id]["GT"] = gt
+            if REF not in (allele_A, allele_B):
+                logger.error(f"Предупреждение: REF {REF} не совпадает с аллелями {SNP_A}/{SNP_B} для SNP {row.SNP}")
+                record.samples[sample_id]["GT"] = (None, None)
+            else:
+                record.samples[sample_id]["GT"] = gt
+            # [A/B] ["T"/"G"]
+            # 0 - REF, 1 - ALT
+            # if IlmnStrand == "BOT":
+            #     SNP_B, SNP_A = SNP_A, SNP_B # [B/A]
+            # if RefStrand == "-":
+            #     SNP_A = complementarity[SNP_A]
+            #     SNP_B = complementarity[SNP_B]
+            # SNP_normal = {"A": SNP_A, "B": SNP_B}
+
+            # allele1 = 0 if SNP_normal[row.Allele1_AB] == REF else 1
+            # allele2 = 0 if SNP_normal[row.Allele2_AB] == REF else 1
+            # # Сортируем для создания нефазированного генотипа (0/1)
+            # # Т.к неизвестно какой от отца, а какой от матери
+            # gt = tuple(sorted((allele1, allele2)))
+            # if REF not in (SNP_A, SNP_B):
+            #     logger.error(f"Предупреждение: REF {REF} не совпадает с аллелями {SNP_A}/{SNP_B} для SNP {row.SNP}")
+            #     record.samples[sample_id]["GT"] = (None, None)
+            # else:
+            #     record.samples[sample_id]["GT"] = gt
         else:
             record.samples[sample_id]["GT"] = (None, None)
 
@@ -120,43 +167,52 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
     """
     Обработка одного файла
     """
-    try:
-        # pyarrow с 1 минуты 25 секунд до 25 секунд
-        df = pd.read_csv(
-            os.path.join(path_to_data, name_file),
-            sep="\t",
-            header=9,
-            compression="gzip",
-            engine="pyarrow",
-        )
-        logger.info(f"Запуск для файла {name_file}")
+    # try:
+    file_name = f"{os.getenv('PATH_VCF_SEP')}/{name_file}"
 
-        rdf = pd.merge(df, bovinehd_manifest_df, left_on="SNP Name", right_on="Name")
-        rdf.drop(columns=["Name"], inplace=True)
+    test_mode = test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    if test_mode:
+        file_name = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}"
 
-        logger.info("Создание колонки REF")
-        rdf["REF"] = rdf.progress_apply(create_column_REF, axis=1)
+    if Path(file_name).exists():
+        return None
+    
+    # pyarrow с 1 минуты 25 секунд до 25 секунд
+    df = pd.read_csv(
+        os.path.join(path_to_data, name_file),
+        sep="\t",
+        header=9,
+        compression="gzip",
+        engine="pyarrow",
+    )
+    logger.info(f"Запуск для файла {name_file}")
 
-        logger.info("Создание колонки ALT")
-        rdf["ALT"] = rdf.progress_apply(create_column_ALT, axis=1)
-        rdf = rdf[rdf["ALT"] != "DATA_ERROR"]
-        rdf.columns = (
-            rdf.columns.str.strip().str.replace(" - ", "_").str.replace(" ", "_")
-        )
+    rdf = pd.merge(df, bovinehd_manifest_df, left_on="SNP Name", right_on="Name")
+    rdf.drop(columns=["Name"], inplace=True)
 
-        grouped_by_sample = rdf.groupby("Sample_ID")
+    logger.info("Создание колонки REF")
+    rdf["REF"] = rdf.progress_apply(create_column_REF, axis=1)
 
-        logger.info("Создание .vcf файла")
-        for sample_id, sample_data in tqdm(
-            grouped_by_sample, total=len(grouped_by_sample)
-        ):
-            create_vcf_for_sample(sample_id, sample_data, name_file)
+    logger.info("Создание колонки ALT")
+    rdf["ALT"] = rdf.progress_apply(create_column_ALT, axis=1)
+    rdf = rdf[rdf["ALT"] != "DATA_ERROR"]
+    rdf.columns = (
+        rdf.columns.str.strip().str.replace(" - ", "_").str.replace(" ", "_")
+    )
 
-        return None  # Возвращаем None в случае успеха
+    grouped_by_sample = rdf.groupby("Sample_ID")
 
-    except Exception as e:
-        # Возвращаем ошибку, чтобы увидеть ее в главном процессе
-        logger.error(f"Ошибка при обработке файла {name_file}: {e}")
+    logger.info("Создание .vcf файла")
+    for sample_id, sample_data in tqdm(
+        grouped_by_sample, total=len(grouped_by_sample)
+    ):
+        create_vcf_for_sample(sample_id, sample_data, name_file)
+
+    return None  # Возвращаем None в случае успеха
+
+    # except Exception as e:
+    #     # Возвращаем ошибку, чтобы увидеть ее в главном процессе
+    #     logger.error(f"Ошибка при обработке файла {name_file}: {e}")
 
 
 if __name__ == "__main__":
@@ -171,10 +227,16 @@ if __name__ == "__main__":
     logger.info("Подготовка файлов...")
     input_directory = os.getenv("PATH_TO_RAW")
     output_directory = os.getenv("PATH_TO_PREPARED")
+    path_to_data = os.getenv("PATH_TO_PREPARED")
+
+    test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    if test_mode:
+        input_directory = os.getenv("PATH_TO_RAW_TEST")
+        output_directory = os.getenv("PATH_TO_PREPARED_TEST")
+        path_to_data = os.getenv("PATH_TO_PREPARED_TEST")
+
     process_archives(input_directory, output_directory)
 
-
-    path_to_data = os.getenv("PATH_TO_PREPARED")
     all_data = os.listdir(path_to_data)
     # [4:5] - самый маленький файл
     # all_data = [all_data[-2]]
@@ -194,3 +256,10 @@ if __name__ == "__main__":
     logger.info("Конвертация...")
     for file in tqdm(all_data, total=len(all_data)):
         process_file(file, path_to_data, bovinehd_manifest_df)
+
+
+    # Сжатие, индексирование, объединение, создания формата для plink
+    cmd = CMD()
+    cmd.prepare_vcf_files()
+    cmd.merge_vcf()
+    cmd.convert_to_plink()

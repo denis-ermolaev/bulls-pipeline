@@ -1,0 +1,31 @@
+PLINK v1.9.0-b.7.11 64-bit (19 Aug 2025)
+Options in effect:
+  --chr-set 31
+  --make-bed
+  --memory 80000
+  --out tests/results/vcf/merged_plink
+  --vcf tests/results/vcf/merged.vcf.gz
+
+Hostname: user-G482-Z51-00
+Working directory: /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline
+Start time: Fri Mar  6 16:33:17 2026
+
+Random number seed: 1772803997
+4116313 MB RAM detected; reserving 80000 MB for main workspace.
+--vcf: tests/results/vcf/merged_plink-temporary.bed +
+tests/results/vcf/merged_plink-temporary.bim +
+tests/results/vcf/merged_plink-temporary.fam written.
+1448 variants loaded from .bim file.
+17 samples (0 males, 0 females, 17 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to tests/results/vcf/merged_plink.nosex .
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 17 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+Total genotyping rate is exactly 1.
+1448 variants and 17 samples pass filters and QC.
+Note: No phenotypes present.
+--make-bed to tests/results/vcf/merged_plink.bed +
+tests/results/vcf/merged_plink.bim + tests/results/vcf/merged_plink.fam ...
+done.
+
+End time: Fri Mar  6 16:33:17 2026

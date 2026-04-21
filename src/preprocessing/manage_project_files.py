@@ -101,8 +101,14 @@ if __name__ == "__main__":
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
         datefmt='%H:%M:%S'
     )
-    
+
     input_directory = os.getenv("PATH_TO_RAW")
     output_directory = os.getenv("PATH_TO_PREPARED")
+
+    # TEST MODE
+    test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    if test_mode:
+        input_directory = os.getenv("PATH_TO_RAW_TEST")
+        output_directory = os.getenv("PATH_TO_PREPARED_TEST")
 
     process_archives(input_directory, output_directory)

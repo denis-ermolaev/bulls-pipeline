@@ -95,3 +95,13 @@ if __name__ == "__main__":
     print(get_ref_base(30, 118403108))
     print(get_ref_base(30, "118403108"))
     print(get_ref_base("30", 118403108))
+
+    print("Проверка 1.2 и 2.0 референса")
+
+    print(get_ref_base("24", 997)) # A
+
+    print(get_ref_base("24", 1025)) # G
+
+    print(get_ref_base("24", 1027)) # T
+
+    print(get_ref_base("24", 2700)) # A

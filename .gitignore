@@ -1,6 +1,6 @@
 .venv
 .vscode
-bin
-data
-results
+bin/**
+data/**
+results/**
 **/**/__pycache__
