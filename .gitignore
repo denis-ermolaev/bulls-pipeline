@@ -4,6 +4,6 @@ bin/**
 data/**
 results/**
 tests/results/**
-notebooks/archive
+notebooks/archive/**
 **/**/__pycache__
 .mypy_cache
