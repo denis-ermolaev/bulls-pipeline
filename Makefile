@@ -6,8 +6,6 @@ install:
 run_pre:
 	python src/preprocessing/main.py
 
-
-
 # Отдельный запуск модулей
 prepare_files:
 	python src/preprocessing/manage_project_files.py
@@ -15,3 +13,7 @@ prepare_files:
 # Вспомогательные команды
 requirements:
 	pip freeze > requirements.txt
+
+## Запустить проверку ошибок/типов и т.п mypy
+mypy:
+	mypy . --cache-dir /dev/null

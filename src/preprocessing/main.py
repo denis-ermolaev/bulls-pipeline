@@ -25,7 +25,7 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
     filepath = f"{os.getenv('PATH_VCF_SEP')}/{name_file}/{sample_id}.vcf"
     output_path = Path(f"{os.getenv('PATH_VCF_SEP')}/{name_file}")
 
-    test_mode = test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    test_mode = test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
     if test_mode:
         filepath = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}/{sample_id}.vcf"
         output_path = Path(f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}")
@@ -68,7 +68,7 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
         IlmnStrand = row.IlmnStrand
         RefStrand = row.RefStrand
         REF = row.REF
-        alphabetical_order = ["A", "C", "G", "T"] # Правильный ?
+        alphabetical_order = ["A", "C", "G", "T"]  # Правильный ?
 
         if row.Allele1_AB != "-" and row.Allele2_AB != "-":
             if f"{SNP_A}/{SNP_B}" not in ["A/T", "C/G", "T/A", "G/C"]:
@@ -81,8 +81,8 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
                 else:
                     allele_A = SNP_B
             elif f"{SNP_A}/{SNP_B}" in ["A/T", "C/G", "T/A", "G/C"]:
-                num_SNP_A = alphabetical_order.index(SNP_A) # 0, 1, 2, 3
-                num_SNP_B = alphabetical_order.index(SNP_B) # 0, 1, 2, 3
+                num_SNP_A = alphabetical_order.index(SNP_A)  # 0, 1, 2, 3
+                num_SNP_B = alphabetical_order.index(SNP_B)  # 0, 1, 2, 3
 
                 if IlmnStrand == "TOP":
                     allele_A = SNP_A if num_SNP_A < num_SNP_B else SNP_B
@@ -98,7 +98,9 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
             allele2 = 0 if SNP_normal[row.Allele2_AB] == REF else 1
             gt = tuple(sorted((allele1, allele2)))
             if REF not in (allele_A, allele_B):
-                logger.error(f"Предупреждение: REF {REF} не совпадает с аллелями {SNP_A}/{SNP_B} для SNP {row.SNP}")
+                logger.error(
+                    f"Предупреждение: REF {REF} не совпадает с аллелями {SNP_A}/{SNP_B} для SNP {row.SNP}"
+                )
                 record.samples[sample_id]["GT"] = (None, None)
             else:
                 record.samples[sample_id]["GT"] = gt
@@ -170,13 +172,13 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
     # try:
     file_name = f"{os.getenv('PATH_VCF_SEP')}/{name_file}"
 
-    test_mode = test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    test_mode = test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
     if test_mode:
         file_name = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}"
 
     if Path(file_name).exists():
         return None
-    
+
     # pyarrow с 1 минуты 25 секунд до 25 секунд
     df = pd.read_csv(
         os.path.join(path_to_data, name_file),
@@ -196,16 +198,12 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
     logger.info("Создание колонки ALT")
     rdf["ALT"] = rdf.progress_apply(create_column_ALT, axis=1)
     rdf = rdf[rdf["ALT"] != "DATA_ERROR"]
-    rdf.columns = (
-        rdf.columns.str.strip().str.replace(" - ", "_").str.replace(" ", "_")
-    )
+    rdf.columns = rdf.columns.str.strip().str.replace(" - ", "_").str.replace(" ", "_")
 
     grouped_by_sample = rdf.groupby("Sample_ID")
 
     logger.info("Создание .vcf файла")
-    for sample_id, sample_data in tqdm(
-        grouped_by_sample, total=len(grouped_by_sample)
-    ):
+    for sample_id, sample_data in tqdm(grouped_by_sample, total=len(grouped_by_sample)):
         create_vcf_for_sample(sample_id, sample_data, name_file)
 
     return None  # Возвращаем None в случае успеха
@@ -217,11 +215,11 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
 
 if __name__ == "__main__":
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    
+
     logging.basicConfig(
         level=getattr(logging, log_level),
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%H:%M:%S'
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     logger.info("Подготовка файлов...")
@@ -229,7 +227,7 @@ if __name__ == "__main__":
     output_directory = os.getenv("PATH_TO_PREPARED")
     path_to_data = os.getenv("PATH_TO_PREPARED")
 
-    test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
     if test_mode:
         input_directory = os.getenv("PATH_TO_RAW_TEST")
         output_directory = os.getenv("PATH_TO_PREPARED_TEST")
@@ -243,7 +241,7 @@ if __name__ == "__main__":
     # all_data = all_data[4:5]
 
     logger.info("Загрузка общего файла манифеста...")
-    bovinehd_manifest_df = pd.read_csv(
+    bovinehd_manifest_df = pd.read_csv(  # pyright: ignore[reportCallIssue]
         os.getenv("MANIFEST_PATH"),
         sep=",",
         header=7,
@@ -256,7 +254,6 @@ if __name__ == "__main__":
     logger.info("Конвертация...")
     for file in tqdm(all_data, total=len(all_data)):
         process_file(file, path_to_data, bovinehd_manifest_df)
-
 
     # Сжатие, индексирование, объединение, создания формата для plink
     cmd = CMD()

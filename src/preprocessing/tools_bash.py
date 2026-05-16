@@ -1,35 +1,48 @@
-import subprocess
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-from tqdm import tqdm
 import logging
+import os
+import subprocess
+from pathlib import Path
+
+import pandas as pd
+from dotenv import load_dotenv
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 load_dotenv()
 
 
 class CMD:
+    # TODO: Отчистка tmp файлов, после завершения работы python
     def __init__(self):
-        # Обязательно оборачиваем в Path для работы .glob() и /
+        # Общие пути
         self.data_dir = Path(os.getenv("PATH_VCF_SEP"))
-        self.output_dir = Path(os.getenv("PATH_VCF"))
+        """Папка с отдельными .vcf для каждой коровы"""
 
+        self.output_dir = Path(os.getenv("PATH_VCF"))
+        """Папка с результатами объединения vcf файлов"""
+
+        self.imputation_dir = Path(os.getenv("PATH_IMPUTATION"))
+        """Папка с результатами импутации"""
+
+        self.gwas_dir = Path(os.getenv("PATH_GWAS"))
+        """Папка с результатами gwas"""
+
+        # Пути к конкретным файлам
+        self.merged_vcf_file = self.output_dir / "merged.vcf.gz"
+
+        # Программы
         self.bgzip = os.getenv("BGZIP")
         self.bcftools = os.getenv("BCFTOOLS")
         self.plink = os.getenv("PLINK")
-
         self.beagle = os.getenv("BEAGLE")
         self.regenie = os.getenv("REGENIE")
 
-        test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+        # Переопределение путей для TEST режима
+        test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
         if test_mode:
             self.data_dir = Path(os.getenv("PATH_VCF_SEP_TEST"))
             self.output_dir = Path(os.getenv("PATH_VCF_TEST"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        self.merge_vcf_path: Path  # Объединённый vcf файл
 
     def run_command(self, cmd):
         logger.debug(f"Running: {' '.join(cmd)}")
@@ -55,7 +68,9 @@ class CMD:
                     # Пишем во временный файл
                     # Используем -c для вывода в stdout и аргумент stdout в subprocess
                     with open(tmp_gz_file, "wb") as f_out:
-                        subprocess.run([self.bgzip, "-c", str(vcf)], stdout=f_out, check=True)
+                        subprocess.run(
+                            [self.bgzip, "-c", str(vcf)], stdout=f_out, check=True
+                        )
                     os.replace(tmp_gz_file, gz_file)
                 except (Exception, KeyboardInterrupt) as e:
                     # Если прервали (Ctrl+C), удаляем мусор
@@ -66,7 +81,9 @@ class CMD:
             if not Path(csi_file).exists():
                 try:
                     # Пишем во временный файл
-                    self.run_command([self.bcftools, "index", "-f", gz_file, "-o", tmp_csi_file])
+                    self.run_command(
+                        [self.bcftools, "index", "-f", gz_file, "-o", tmp_csi_file]
+                    )
                     # Если всё прошло успешно (не прервано) — переименовываем
                     os.replace(tmp_csi_file, csi_file)
                 except (Exception, KeyboardInterrupt) as e:
@@ -83,7 +100,9 @@ class CMD:
         logger.info("Объединение всех vcf файлов и индексация финального файла...")
 
         if not Path(output_path).exists():
-            logger.debug(f"Путь до merge файла: {Path(output_path)}, {Path(output_path)}")
+            logger.debug(
+                f"Путь до merge файла: {Path(output_path)}, {Path(output_path)}"
+            )
             try:
                 with open(list_file, "w") as f:
                     for gz in gz_files:
@@ -95,7 +114,7 @@ class CMD:
                     "merge",
                     "-l",
                     str(list_file),
-                    "-Oz", # Уже сжатый файл
+                    "-Oz",  # Уже сжатый файл
                     "-o",
                     str(output_path_tmp),
                 ]
@@ -104,17 +123,27 @@ class CMD:
                     os.replace(output_path_tmp, output_path)
                     self.run_command([self.bcftools, "index", "-t", str(output_path)])
             except (Exception, KeyboardInterrupt) as e:
-                    # Если прервали (Ctrl+C), удаляем мусор
-                    if Path(output_path_tmp).exists():
-                        os.remove(output_path_tmp)
-                    print(f"Ошибка при сжатии: {e}")
+                # Если прервали (Ctrl+C), удаляем мусор
+                if Path(output_path_tmp).exists():
+                    os.remove(output_path_tmp)
+                print(f"Ошибка при сжатии: {e}")
 
         self.merge_vcf_path = output_path
 
     def convert_to_plink(self, out_name="merged_plink"):
+        """
+        Создание необходимых для GWAS файлов
+        covariates.txt
+        phenotype.txt
+        """
+        try:
+            self.merge_vcf_path = self.merge_vcf_path
+        except AttributeError:
+            # TODO: получать из .env
+            self.merge_vcf_path = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/merged.vcf.gz"
         logger.info("Конвертация в формат для plink...")
         out_prefix = self.output_dir / out_name
-        if Path(out_prefix).with_suffix('.bed').exists():
+        if Path(f"{self.output_dir}/phenotype.txt").exists():
             return True
 
         # Plink сам создаёт временные файлы
@@ -131,26 +160,303 @@ class CMD:
             str(out_prefix),
         ]
         self.run_command(cmd)
+
+        # Отчистка
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{str(out_prefix)}",
+                "--memory",
+                "5000",
+                "--chr-set",  # На всех 31 хромосомах
+                "31",
+                "--maf",
+                "0.05",
+                "--geno",
+                "0.1",
+                "--mind",
+                "0.1",
+                "--make-bed",
+                "--out",
+                f"{str(self.output_dir)}/clean_{out_name}",
+            ]
+        )
+
+        # Убрать SNP с сцеплением LD
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{str(self.output_dir)}/clean_{out_name}",
+                "--memory",
+                "5000",
+                "--chr-set",
+                "31",  # На всех 31 хромосомах
+                "--indep-pairwise",
+                "50",
+                "5",
+                "0.2",
+                "--out",
+                f"{self.output_dir}/prunning_list",
+            ]
+        )
+
+        # PCA
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{str(self.output_dir)}/clean_{out_name}",
+                "--memory",
+                "5000",
+                "--chr-set",
+                "31",  # На всех 31 хромосомах
+                "--extract",
+                f"{str(self.output_dir) + '/prunning_list'}.prune.in",
+                "--pca",
+                "10",
+                "--out",
+                f"{self.output_dir}/bulls_pca",
+            ]
+        )
+
+        # Ковариаты
+        df_covariates = pd.read_csv(
+            f"{self.output_dir}/bulls_pca.eigenvec", sep=" ", header=None
+        )
+        columns = list(range(1, len(df_covariates.columns) - 1))
+        columns = ["FID", "IID"] + [f"V{i}" for i in columns]
+        df_covariates.columns = columns
+        df_covariates.to_csv(f"{self.output_dir}/covariates.txt", sep=" ", index=False)
+
+        # Фенотипы
+        df_phenotype = pd.read_csv(
+            "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/all_phenotypes.csv"
+        )
+        columns = list(df_phenotype.columns)
+        columns[0] = "IID"
+
+        df_phenotype.columns = columns
+
+        df_phenotype["FID"] = df_phenotype["IID"]
+
+        df_phenotype = df_phenotype[["FID", "IID", "Yield", "Fat", "Protein"]].copy()
+        for column in ["Yield", "Fat", "Protein"]:
+            df_phenotype[column] = df_phenotype[column].fillna("NA")
+        df_phenotype.to_csv(f"{self.output_dir}/phenotype.txt", sep=" ", index=False)
+
     def imputation(self):
-        # self.output_dir
-        # TODO:
-        # TODO: понять сколько хромосом в файле
-        # TODO: сделать импутацию по каждой хромосоме
-        # TODO: отфильтровать результаты
-        # TODO: сшить полученный файл
-        pass
+        try:
+            self.merge_vcf_path = self.merge_vcf_path
+        except AttributeError:
+            # TODO: получать из .env
+            self.merge_vcf_path = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/merged.vcf.gz"
+        # Создание папки с разделёнными хромосомами
+        if not Path(
+            "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes"
+        ).exists():
+            self.run_command(
+                [
+                    "mkdir",
+                    "-p",
+                    "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes",
+                ]
+            )
+
+        # Разделение хромосом
+        for num_chr in range(1, 32):  # с 1 по 31 включительно
+            output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz"
+            output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz.tmp"
+            if not Path(
+                f"{output_path}.csi"
+            ).exists():  # Проверка по конечной операции, а именно появлению индекса
+                cmd = [
+                    self.bcftools,
+                    "view",
+                    "-r",
+                    str(num_chr),
+                    str(self.merge_vcf_path),
+                    "-Oz",  # Уже сжатый файл
+                    "-o",
+                    output_path_tmp,
+                ]
+                if self.run_command(cmd):
+                    # Индексация финального файла
+                    self.run_command(
+                        [self.bcftools, "index", "-c", str(output_path_tmp)]
+                    )
+                    os.replace(output_path_tmp, output_path)
+                    os.replace(f"{output_path_tmp}.csi", f"{output_path}.csi")
+
+        for num_chr in range(1, 30):  # с 1 по 29 включительно
+            output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}"
+            output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}.tmp"
+            if not Path(
+                f"{output_path}_filtered.vcf.gz"
+            ).exists():  # По последней операции
+                self.run_command(
+                    [
+                        "mkdir",
+                        "-p",
+                        f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}",
+                    ]
+                )
+                cmd = [
+                    "java",
+                    "-Xmx100g",
+                    "-jar",
+                    self.beagle,
+                    f"ref=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/ref_panel/Chr{num_chr}_phased_snp.vcf.gz",
+                    f"gt=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz",
+                    f"map=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/genetic_maps_holstein/chr{num_chr}.map",
+                    f"out={output_path_tmp}",
+                    f"chrom={num_chr}",
+                    "nthreads=16",
+                    "ne=50000",
+                    "cluster=0.005",
+                    "window=200",
+                    "em=false",
+                    "impute=true",
+                ]
+                if self.run_command(cmd):
+                    # Индексация финального файла
+                    self.run_command(
+                        [self.bcftools, "index", "-c", str(f"{output_path_tmp}.vcf.gz")]
+                    )
+                    self.run_command(
+                        [
+                            self.bcftools,
+                            "view",
+                            "-G",
+                            f"{output_path_tmp}.vcf.gz",
+                            "-Oz",
+                            "-o",
+                            f"{output_path_tmp}_for_analysis.vcf.gz",
+                        ]
+                    )
+                    # /opt/tools/bin/bcftools view -i 'INFO/DR2>=0.7' -Oz -o "${f%.vcf.gz}_filtered.vcf.gz" "$f"
+                    self.run_command(
+                        [
+                            self.bcftools,
+                            "view",
+                            "-i",
+                            "INFO/DR2>=0.7",  # Условие фильтра без кавычек
+                            f"{output_path_tmp}.vcf.gz",
+                            "-Oz",
+                            "-o",
+                            f"{output_path_tmp}_filtered.vcf.gz",
+                        ]
+                    )
+
+                    os.replace(f"{output_path_tmp}.vcf.gz", f"{output_path}.vcf.gz")
+                    os.replace(f"{output_path_tmp}.log", f"{output_path}.log")
+                    os.replace(
+                        f"{output_path_tmp}.vcf.gz.csi",
+                        f"{output_path}.vcf.gz.csi",
+                    )
+                    # for_analysis - для быстрого получения статистики по DR2 и т.п
+                    os.replace(
+                        f"{output_path_tmp}_for_analysis.vcf.gz",
+                        f"{output_path}_for_analysis.vcf.gz",
+                    )
+                    # filtered - для последующего использования в gwas(Оставляет только качественно импутированные SNP)
+                    os.replace(
+                        f"{output_path_tmp}_filtered.vcf.gz",
+                        f"{output_path}_filtered.vcf.gz",
+                    )
+
+    def gwas(self, num_chr: int):
+        input_file = f"{self.imputation_dir}/chr{num_chr}/chr{num_chr}_filtered.vcf.gz"
+        output_dir = f"{self.gwas_dir}/chr{num_chr}"
+
+        self.run_command(
+            [
+                "mkdir",
+                "-p",
+                f"{output_dir}",
+            ]
+        )
+
+        # Конвертация в формат plink
+        self.run_command(
+            [
+                self.plink,
+                "--chr-set",
+                "29",
+                "--make-bed",
+                "--memory",
+                "80000",
+                "--vcf",
+                f"{input_file}",
+                "--out",
+                f"{output_dir}/plink_chr{num_chr}",
+            ]
+        )
+        # Отчистка
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{output_dir}/plink_chr{num_chr}",
+                "--memory",
+                "5000",
+                "--chr-set",
+                "29",
+                "--maf",
+                "0.1",
+                "--geno",
+                "0.1",
+                "--mind",
+                "0.1",
+                "--make-bed",
+                f"--out {output_dir}/plink_filtered_chr{num_chr}",
+            ]
+        )
+
+        # Первый этап GWAS
+        self.run_command(
+            [
+                self.regenie,
+                "--step 1",
+                f"--bed {output_dir}/plink_filtered_chr{num_chr}",
+                f"--phenoFile {self.output_dir}/phenotype.txt",
+                f"--covarFile {self.output_dir}/covariates.txt",
+                "--nauto 29",
+                "--bsize 1000",
+                "--lowmem",
+                f"--out {output_dir}/step1_results",
+            ]
+        )
+
+        # Второй этап GWAS
+        self.run_command(
+            [
+                self.regenie,
+                "--step 2",
+                f"--bed {output_dir}/plink_filtered_chr{num_chr}",
+                f"--phenoFile {self.output_dir}/phenotype.txt",
+                f"--covarFile {self.output_dir}/covariates.txt",
+                "--nauto 29",
+                "--bsize 400",
+                f"--pred {output_dir}/step1_results_pred.list",
+                f"--out {output_dir}/final_gwas_results",
+            ]
+        )
 
 
 if __name__ == "__main__":
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    
+
     logging.basicConfig(
         level=getattr(logging, log_level),
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%H:%M:%S'
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     cmd = CMD()
-    cmd.prepare_vcf_files()
-    cmd.merge_vcf()
-    cmd.convert_to_plink()
+    # cmd.prepare_vcf_files()
+    # cmd.merge_vcf()
+    # cmd.convert_to_plink()
+    # cmd.imputation()
+    cmd.gwas(1)

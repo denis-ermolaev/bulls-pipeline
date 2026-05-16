@@ -7,8 +7,13 @@
 ## Индексация:
 ```bash
 /opt/tools/bin/bcftools index file_name.vcf.gz
+
+# Индексация всех файлов в папке
+for file in *.vcf.gz; do
+    /opt/tools/bin/bcftools index "$file"
+done
 ```
---tbi - .tbi
+--tbi -(*) .tbi
 
 ## Пересечение:
 ```bash
@@ -34,6 +39,8 @@
 ## Извлечение данных в кастомном формате
 ```bash
 /opt/tools/bin/bcftools query -f '%CHROM\t%POS\n' > ref_positions.txt
+
+/opt/tools/bin/bcftools query -i 'DR2>0.8' -f '%CHROM\n' ваш_файл.vcf.gz | wc -l
 ```
 1) %CHROM, %POS, %ID, %REF, %ALT, %QUAL, %FILTER - базовые поля
 2) %INFO/ИМЯ_ТЕГА - для извлечения тега
@@ -46,9 +53,24 @@
 
 ## Объединение
 ```bash
+# Объединение разных образцов
 /opt/tools/bin/bcftools merge --merge all *.vcf.gz -Oz -o merge.vcf.gz
+
+
+# Объединение с исключением
+find /путь/к/родительской/папке -type f -name "chr*.vcf.gz" \
+  ! -name "chr1_for_analysis.vcf.gz" \
+  | grep -E 'chr[0-9]+\.vcf\.gz$' > merge_list.txt
+
+# Объединение разных SNP у тех же самых образцов
+/opt/tools/bin/bcftools concat -f merge_list_filtered.txt -Oz -o result_merge_filtered_all_genome.vcf.gz
 ```
 --write-index - автоматически создать индекс
+
+# Сортировка
+```bash
+/opt/tools/bin/bcftools sort input.vcf.gz -Oz -o sorted_output.vcf.gz
+```
 
 # Дополнительные действия
 ```bash
@@ -58,3 +80,6 @@ shuf all_my_samples.txt > shuffled_samples.txt
 head -n 1000 shuffled_samples.txt > group1_samples.txt
 tail -n 1000 shuffled_samples.txt > group2_samples.txt
 ```
+
+
+

@@ -3,4 +3,7 @@
 bin/**
 data/**
 results/**
+tests/results/**
+notebooks/archive
 **/**/__pycache__
+.mypy_cache
