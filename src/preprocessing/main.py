@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 from manage_project_files import process_archives
-import tools
+import tools_genome
 import pysam
 from pathlib import Path
 from dotenv import load_dotenv
@@ -134,7 +134,7 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
 def create_column_REF(row):
     if row.Chr == "0" or row.Position == 0:
         return None
-    return tools.get_ref_base(row.Chr, row.Position)
+    return tools_genome.get_ref_base(row.Chr, row.Position)
 
 
 def create_column_ALT(row):

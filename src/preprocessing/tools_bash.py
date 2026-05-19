@@ -1,3 +1,4 @@
+import re
 import logging
 import os
 import subprocess
@@ -6,6 +7,10 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+from multiprocessing import Pool
+
+from typing import Callable, Any, List
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -44,11 +49,31 @@ class CMD:
             self.output_dir = Path(os.getenv("PATH_VCF_TEST"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def run_command(self, cmd):
+    @staticmethod
+    def parallel_run(
+        func: Callable[[Any], Any],
+        objects: List[Any],
+        processes: int = 1,
+    ):
+        """
+        Параллельно запустить ф-ю на нескольких значениях (object)
+        Может использоваться для запуска ф-и для нескольких файлов параллельно
+        """
+        with Pool(processes) as p:
+            result = p.map(func, objects)
+        return result
+
+    @staticmethod
+    def run_command(cmd):
+        # TODO: Сделать передачу cmd через словарь, который потом парсится в список
         logger.debug(f"Running: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            logger.debug(f"Error: {result.stderr}")
+            logger.error(f"Command failed with code {result.returncode}")
+            if result.stderr.strip():
+                logger.error(f"STDERR:\n{result.stderr}")
+            if result.stdout.strip():
+                logger.error(f"STDOUT:\n{result.stdout}")
             return False
         return True
 
@@ -143,6 +168,8 @@ class CMD:
             self.merge_vcf_path = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/merged.vcf.gz"
         logger.info("Конвертация в формат для plink...")
         out_prefix = self.output_dir / out_name
+
+        # Если последний файл результата есть, то прекратить выполнение ф-и
         if Path(f"{self.output_dir}/phenotype.txt").exists():
             return True
 
@@ -172,11 +199,11 @@ class CMD:
                 "--chr-set",  # На всех 31 хромосомах
                 "31",
                 "--maf",
-                "0.05",
+                "0.01",  # Для более точного расчёта родства ?
                 "--geno",
-                "0.1",
+                "0.5",
                 "--mind",
-                "0.1",
+                "0.5",
                 "--make-bed",
                 "--out",
                 f"{str(self.output_dir)}/clean_{out_name}",
@@ -202,6 +229,29 @@ class CMD:
             ]
         )
 
+        #     plink --bfile step1_qc \
+        #   --extract step1_prune.prune.in \
+        #   --make-bed \
+        #   --out results/gwas/step1_snps
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{str(self.output_dir)}/clean_{out_name}",
+                "--memory",
+                "50000",
+                "--chr-set",
+                "31",
+                "--chr",
+                "1-29",
+                "--extract",
+                f"{str(self.output_dir) + '/prunning_list'}.prune.in",
+                "--make-bed",
+                "--out",
+                f"{str(self.output_dir)}/clean_{out_name}_1_29_prune",
+            ]
+        )
+
         # PCA
         self.run_command(
             [
@@ -215,7 +265,7 @@ class CMD:
                 "--extract",
                 f"{str(self.output_dir) + '/prunning_list'}.prune.in",
                 "--pca",
-                "10",
+                "5",
                 "--out",
                 f"{self.output_dir}/bulls_pca",
             ]
@@ -244,9 +294,25 @@ class CMD:
         df_phenotype = df_phenotype[["FID", "IID", "Yield", "Fat", "Protein"]].copy()
         for column in ["Yield", "Fat", "Protein"]:
             df_phenotype[column] = df_phenotype[column].fillna("NA")
+        # пример на Python
+        from scipy.stats import rankdata, norm
+        import numpy as np
+
+        df_phenotype["Yield_norm"] = norm.ppf(
+            (rankdata(df_phenotype["Yield"]) - 0.5) / len(df_phenotype)
+        )
+        df_phenotype["random_phenotype"] = np.random.normal(0, 1, len(df_phenotype))
         df_phenotype.to_csv(f"{self.output_dir}/phenotype.txt", sep=" ", index=False)
 
     def imputation(self):
+        """
+        Обёртка для импутации сразу нескольких хромосом
+        """
+        objects = list(range(1, 30))  # 29 хромосом
+
+        self.parallel_run(self._imputation, objects, 4)
+
+    def _imputation(self, num_chr: int):
         try:
             self.merge_vcf_path = self.merge_vcf_path
         except AttributeError:
@@ -265,184 +331,294 @@ class CMD:
             )
 
         # Разделение хромосом
-        for num_chr in range(1, 32):  # с 1 по 31 включительно
-            output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz"
-            output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz.tmp"
-            if not Path(
-                f"{output_path}.csi"
-            ).exists():  # Проверка по конечной операции, а именно появлению индекса
-                cmd = [
-                    self.bcftools,
-                    "view",
-                    "-r",
-                    str(num_chr),
-                    str(self.merge_vcf_path),
-                    "-Oz",  # Уже сжатый файл
-                    "-o",
-                    output_path_tmp,
-                ]
-                if self.run_command(cmd):
-                    # Индексация финального файла
-                    self.run_command(
-                        [self.bcftools, "index", "-c", str(output_path_tmp)]
-                    )
-                    os.replace(output_path_tmp, output_path)
-                    os.replace(f"{output_path_tmp}.csi", f"{output_path}.csi")
+        output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz"
+        output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz.tmp"
+        if not Path(
+            f"{output_path}.csi"
+        ).exists():  # Проверка по конечной операции, а именно появлению индекса
+            cmd = [
+                self.bcftools,
+                "view",
+                "-r",
+                str(num_chr),
+                str(self.merge_vcf_path),
+                "-Oz",  # Уже сжатый файл
+                "-o",
+                output_path_tmp,
+            ]
+            if self.run_command(cmd):
+                # Индексация финального файла
+                self.run_command([self.bcftools, "index", "-c", str(output_path_tmp)])
+                os.replace(output_path_tmp, output_path)
+                os.replace(f"{output_path_tmp}.csi", f"{output_path}.csi")
 
-        for num_chr in range(1, 30):  # с 1 по 29 включительно
-            output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}"
-            output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}.tmp"
-            if not Path(
-                f"{output_path}_filtered.vcf.gz"
-            ).exists():  # По последней операции
+        output_path = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}"
+        output_path_tmp = f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}/chr{num_chr}.tmp"
+        if not Path(f"{output_path}_filtered.vcf.gz").exists():  # По последней операции
+            self.run_command(
+                [
+                    "mkdir",
+                    "-p",
+                    f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}",
+                ]
+            )
+            cmd = [
+                "java",
+                "-Xmx100g",
+                "-jar",
+                self.beagle,
+                f"ref=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/ref_panel/Chr{num_chr}_phased_snp.vcf.gz",
+                f"gt=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz",
+                f"map=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/genetic_maps_holstein/chr{num_chr}.map",
+                f"out={output_path_tmp}",
+                f"chrom={num_chr}",
+                "nthreads=6",
+                "ne=50000",
+                "cluster=0.005",
+                "window=200",
+                "em=false",
+                "impute=true",
+            ]
+            if self.run_command(cmd):
+                # Индексация финального файла
+                self.run_command(
+                    [self.bcftools, "index", "-c", str(f"{output_path_tmp}.vcf.gz")]
+                )
                 self.run_command(
                     [
-                        "mkdir",
-                        "-p",
-                        f"/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/imputation/chr{num_chr}",
+                        self.bcftools,
+                        "view",
+                        "-G",
+                        f"{output_path_tmp}.vcf.gz",
+                        "-Oz",
+                        "-o",
+                        f"{output_path_tmp}_for_analysis.vcf.gz",
                     ]
                 )
-                cmd = [
-                    "java",
-                    "-Xmx100g",
-                    "-jar",
-                    self.beagle,
-                    f"ref=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/ref_panel/Chr{num_chr}_phased_snp.vcf.gz",
-                    f"gt=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/vcf/chromosomes/chr{num_chr}.vcf.gz",
-                    f"map=/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/genetic_maps_holstein/chr{num_chr}.map",
-                    f"out={output_path_tmp}",
-                    f"chrom={num_chr}",
-                    "nthreads=16",
-                    "ne=50000",
-                    "cluster=0.005",
-                    "window=200",
-                    "em=false",
-                    "impute=true",
-                ]
-                if self.run_command(cmd):
-                    # Индексация финального файла
-                    self.run_command(
-                        [self.bcftools, "index", "-c", str(f"{output_path_tmp}.vcf.gz")]
-                    )
-                    self.run_command(
-                        [
-                            self.bcftools,
-                            "view",
-                            "-G",
-                            f"{output_path_tmp}.vcf.gz",
-                            "-Oz",
-                            "-o",
-                            f"{output_path_tmp}_for_analysis.vcf.gz",
-                        ]
-                    )
-                    # /opt/tools/bin/bcftools view -i 'INFO/DR2>=0.7' -Oz -o "${f%.vcf.gz}_filtered.vcf.gz" "$f"
-                    self.run_command(
-                        [
-                            self.bcftools,
-                            "view",
-                            "-i",
-                            "INFO/DR2>=0.7",  # Условие фильтра без кавычек
-                            f"{output_path_tmp}.vcf.gz",
-                            "-Oz",
-                            "-o",
-                            f"{output_path_tmp}_filtered.vcf.gz",
-                        ]
-                    )
-
-                    os.replace(f"{output_path_tmp}.vcf.gz", f"{output_path}.vcf.gz")
-                    os.replace(f"{output_path_tmp}.log", f"{output_path}.log")
-                    os.replace(
-                        f"{output_path_tmp}.vcf.gz.csi",
-                        f"{output_path}.vcf.gz.csi",
-                    )
-                    # for_analysis - для быстрого получения статистики по DR2 и т.п
-                    os.replace(
-                        f"{output_path_tmp}_for_analysis.vcf.gz",
-                        f"{output_path}_for_analysis.vcf.gz",
-                    )
-                    # filtered - для последующего использования в gwas(Оставляет только качественно импутированные SNP)
-                    os.replace(
+                # /opt/tools/bin/bcftools view -i 'INFO/DR2>=0.7' -Oz -o "${f%.vcf.gz}_filtered.vcf.gz" "$f"
+                self.run_command(
+                    [
+                        self.bcftools,
+                        "view",
+                        "-i",
+                        "INFO/DR2>=0.7",  # Условие фильтра без кавычек
+                        f"{output_path_tmp}.vcf.gz",
+                        "-Oz",
+                        "-o",
                         f"{output_path_tmp}_filtered.vcf.gz",
-                        f"{output_path}_filtered.vcf.gz",
-                    )
+                    ]
+                )
 
-    def gwas(self, num_chr: int):
+                os.replace(f"{output_path_tmp}.vcf.gz", f"{output_path}.vcf.gz")
+                os.replace(f"{output_path_tmp}.log", f"{output_path}.log")
+                os.replace(
+                    f"{output_path_tmp}.vcf.gz.csi",
+                    f"{output_path}.vcf.gz.csi",
+                )
+                # for_analysis - для быстрого получения статистики по DR2 и т.п
+                os.replace(
+                    f"{output_path_tmp}_for_analysis.vcf.gz",
+                    f"{output_path}_for_analysis.vcf.gz",
+                )
+                # filtered - для последующего использования в gwas(Оставляет только качественно импутированные SNP)
+                os.replace(
+                    f"{output_path_tmp}_filtered.vcf.gz",
+                    f"{output_path}_filtered.vcf.gz",
+                )
+
+    def pre_gwas(self):
+        objects = sorted(
+            [
+                int(re.search(r"\d{1,2}", file.name)[0])
+                for dir in self.imputation_dir.iterdir()
+                if dir.is_dir()
+                for file in dir.iterdir()
+                if file.is_file()
+                and str(file.name).find("_filtered") != -1
+                and str(file.name).find("tmp") == -1
+            ]
+        )
+        self.parallel_run(self._pre_gwas, objects, 5)
+
+    def _pre_gwas(self, num_chr: int):
         input_file = f"{self.imputation_dir}/chr{num_chr}/chr{num_chr}_filtered.vcf.gz"
         output_dir = f"{self.gwas_dir}/chr{num_chr}"
 
-        self.run_command(
-            [
-                "mkdir",
-                "-p",
-                f"{output_dir}",
-            ]
-        )
+        if not Path(output_dir).exists():
+            self.run_command(
+                [
+                    "mkdir",
+                    "-p",
+                    f"{output_dir}",
+                ]
+            )
 
-        # Конвертация в формат plink
+        if not Path(f"{output_dir}/plink_chr{num_chr}").with_suffix(".bed").exists():
+            # Конвертация в формат plink
+            self.run_command(
+                [
+                    self.plink,
+                    "--chr-set",
+                    "29",
+                    "--make-bed",
+                    "--memory",
+                    "80000",
+                    "--vcf",
+                    f"{input_file}",
+                    "--out",
+                    f"{output_dir}/plink_chr{num_chr}",
+                ]
+            )
+        if (
+            not Path(f"{output_dir}/plink_filtered_chr{num_chr}")
+            .with_suffix(".bed")
+            .exists()
+        ):
+            # Отчистка
+            self.run_command(
+                [
+                    self.plink,
+                    "--bfile",
+                    f"{output_dir}/plink_chr{num_chr}",
+                    "--memory",
+                    "80000",
+                    "--chr-set",
+                    "29",
+                    "--maf",
+                    "0.1",
+                    "--geno",
+                    "0.05",
+                    "--mind",
+                    "0.05",
+                    "--make-bed",
+                    "--out",
+                    f"{output_dir}/plink_filtered_chr{num_chr}",
+                ]
+            )
+
+    def pre_gwas_merge(self):
+        # Закончить выполнение ф-и, если конечный результат уже есть
+        if Path(f"{self.gwas_dir}/merged_prune").with_suffix(".bed").exists():
+            return True
+        all_file = [
+            str(file.with_suffix(""))
+            for dir in self.gwas_dir.iterdir()
+            if dir.is_dir()
+            for file in dir.iterdir()
+            if file.is_file() and re.match(r".*plink_filtered_chr.*?\.bed", str(file))
+        ]
+        all_file = sorted(all_file)
+
+        Path(f"{self.gwas_dir}/merge_list.txt").write_text("\n".join(all_file))
+
         self.run_command(
             [
                 self.plink,
-                "--chr-set",
-                "29",
-                "--make-bed",
                 "--memory",
                 "80000",
-                "--vcf",
-                f"{input_file}",
+                "--chr-set",
+                "29",
+                "--merge-list",
+                f"{self.gwas_dir}/merge_list.txt",
+                "--make-bed",
                 "--out",
-                f"{output_dir}/plink_chr{num_chr}",
+                f"{self.gwas_dir}/merged",
             ]
         )
-        # Отчистка
+
         self.run_command(
             [
                 self.plink,
                 "--bfile",
-                f"{output_dir}/plink_chr{num_chr}",
+                f"{self.gwas_dir}/merged",
                 "--memory",
-                "5000",
+                "80000",
                 "--chr-set",
                 "29",
-                "--maf",
-                "0.1",
-                "--geno",
-                "0.1",
-                "--mind",
-                "0.1",
+                "--indep-pairwise",
+                "50",
+                "5",
+                "0.2",
+                "--out",
+                f"{self.gwas_dir}/prunning_list",
+            ]
+        )
+
+        #     plink --bfile step1_qc \
+        #   --extract step1_prune.prune.in \
+        #   --make-bed \
+        #   --out results/gwas/step1_snps
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{self.gwas_dir}/merged",
+                "--memory",
+                "80000",
+                "--chr-set",
+                "29",
+                "--chr",
+                "1-29",
+                "--extract",
+                f"{str(self.gwas_dir) + '/prunning_list'}.prune.in",
                 "--make-bed",
-                f"--out {output_dir}/plink_filtered_chr{num_chr}",
+                "--out",
+                f"{self.gwas_dir}/merged_prune",
             ]
         )
 
-        # Первый этап GWAS
-        self.run_command(
-            [
-                self.regenie,
-                "--step 1",
-                f"--bed {output_dir}/plink_filtered_chr{num_chr}",
-                f"--phenoFile {self.output_dir}/phenotype.txt",
-                f"--covarFile {self.output_dir}/covariates.txt",
-                "--nauto 29",
-                "--bsize 1000",
-                "--lowmem",
-                f"--out {output_dir}/step1_results",
-            ]
-        )
+    def gwas(self):
+        if not Path(f"{self.gwas_dir}/step1_results_pred.list").exists():
+            # Первый этап GWAS
+            self.run_command(
+                [
+                    self.regenie,
+                    "--step",
+                    "1",
+                    "--bed",
+                    # f"{self.gwas_dir}/merged",
+                    f"{self.gwas_dir}/merged_prune",
+                    "--phenoFile",
+                    f"{self.output_dir}/phenotype.txt",
+                    "--covarFile",
+                    f"{self.output_dir}/covariates.txt",
+                    "--nauto",
+                    "29",
+                    "--bsize",
+                    "1000",
+                    "--lowmem",
+                    "--threads",
+                    "32",
+                    "--out",
+                    f"{self.gwas_dir}/step1_results",
+                ]
+            )
 
-        # Второй этап GWAS
-        self.run_command(
-            [
-                self.regenie,
-                "--step 2",
-                f"--bed {output_dir}/plink_filtered_chr{num_chr}",
-                f"--phenoFile {self.output_dir}/phenotype.txt",
-                f"--covarFile {self.output_dir}/covariates.txt",
-                "--nauto 29",
-                "--bsize 400",
-                f"--pred {output_dir}/step1_results_pred.list",
-                f"--out {output_dir}/final_gwas_results",
-            ]
-        )
+        if not Path(f"{self.gwas_dir}/final_gwas_results").with_suffix(".log").exists():
+            # Второй этап GWAS
+            self.run_command(
+                [
+                    self.regenie,
+                    "--step",
+                    "2",
+                    "--bed",
+                    f"{self.gwas_dir}/merged",
+                    "--phenoFile",
+                    f"{self.output_dir}/phenotype.txt",
+                    "--covarFile",
+                    f"{self.output_dir}/covariates.txt",
+                    "--nauto",
+                    "29",
+                    "--bsize",
+                    "400",
+                    "--threads",
+                    "32",
+                    "--pred",
+                    f"{self.gwas_dir}/step1_results_pred.list",
+                    "--out",
+                    f"{self.gwas_dir}/final_gwas_results",
+                ]
+            )
 
 
 if __name__ == "__main__":
@@ -455,8 +631,10 @@ if __name__ == "__main__":
     )
 
     cmd = CMD()
-    # cmd.prepare_vcf_files()
-    # cmd.merge_vcf()
-    # cmd.convert_to_plink()
-    # cmd.imputation()
-    cmd.gwas(1)
+    cmd.prepare_vcf_files()
+    cmd.merge_vcf()
+    cmd.convert_to_plink()
+    cmd.imputation()
+    cmd.pre_gwas()
+    cmd.pre_gwas_merge()
+    cmd.gwas()

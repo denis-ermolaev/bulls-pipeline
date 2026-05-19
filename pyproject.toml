@@ -1,2 +1,9 @@
 [tool.mypy]
-disable_error_code = ["annotation-unchecked", "import-untyped", "arg-type"]
+disable_error_code = ["annotation-unchecked", "import-untyped", "arg-type", "var-annotated"]
+
+[tool.ty.environment]
+python-version = "3.10"
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
