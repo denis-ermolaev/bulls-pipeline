@@ -1,19 +1,19 @@
 # Установка зависемостей
 install:
-	pip install -r requirements.txt
+	uv sync
 
 # Запуск preprocessing
-run_pre:
-	python src/preprocessing/main.py
+run:
+	uv run python src/preprocessing/main.py
 
 # Отдельный запуск модулей
 prepare_files:
-	python src/preprocessing/manage_project_files.py
+	uv run python src/preprocessing/manage_project_files.py
 
 # Вспомогательные команды
 requirements:
-	pip freeze > requirements.txt
+	uv export --format requirements-txt > requirements.txt
 
 ## Запустить проверку ошибок/типов и т.п mypy
 mypy:
-	mypy . --cache-dir /dev/null
+	uv run mypy . --cache-dir /dev/null

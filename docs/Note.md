@@ -78,3 +78,5 @@ done
 for f in $(cat merge_list.txt); do
     /opt/tools/bin/bcftools view -i 'INFO/DR2>=0.8' -Oz -o "${f%.vcf.gz}_filtered.vcf.gz" "$f"
 done
+
+bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/plink_filtered_chr24 --chr-set 29 --memory 80000 --blocks no-pheno-req --out /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/snps_blocks

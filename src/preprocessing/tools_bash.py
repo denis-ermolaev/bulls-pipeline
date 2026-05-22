@@ -1,3 +1,4 @@
+from scipy.stats import chi2
 import re
 import logging
 import os
@@ -5,12 +6,13 @@ import subprocess
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 from dotenv import load_dotenv
 from tqdm import tqdm
 
 from multiprocessing import Pool
 
-from typing import Callable, Any, List
+from typing import Callable, Any, List, cast
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -620,6 +622,65 @@ class CMD:
                 ]
             )
 
+    def gwas_analysis(self):
+        gwas_result = [
+            file
+            for file in self.gwas_dir.iterdir()
+            if file.is_file() and file.suffix == ".regenie"
+        ]
+        suggestive_threshold = 1e-5
+
+        for filepath in gwas_result:
+            if filepath.with_suffix(".txt").exists():
+                continue
+            df = pd.read_csv(filepath, sep="\s+")
+            if "LOG10P" in df.columns:
+                df["P"] = np.power(10, -df["LOG10P"])
+            elif "PVAL" in df.columns:
+                df["P"] = df["PVAL"]
+            elif "CHISQ" in df.columns:
+                df["P"] = chi2.sf(df["CHISQ"], 1)
+            else:
+                raise ValueError("Нужны столбцы LOG10P, PVAL или CHISQ.")
+            df["LOGP"] = -np.log10(df["P"])
+
+            # Отбираем SNP, где P < порога
+            sig_df = df[df["P"] < suggestive_threshold].copy()
+
+            # Сортируем по P-value (от самых значимых к менее значимым)
+            sig_df = sig_df.sort_values("P")["ID"]
+            sig_df.to_csv(filepath.with_suffix(".txt"), header=False, index=False)
+
+        objects = [i for i in range(1, 30)]
+
+        self.parallel_run(self._ld_block, objects, 29)
+
+    def _ld_block(self, num_chr: int):
+        # bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/plink_filtered_chr24
+        # --chr-set 29 --memory 80000 --blocks no-pheno-req
+        # --out /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/snps_blocks
+        if (
+            not Path(f"{self.gwas_dir}/chr{num_chr}/snps_blocks")
+            .with_suffix(".blocks.det")
+            .exists()
+        ):
+            self.run_command(
+                [
+                    self.plink,
+                    "--bfile",
+                    f"{self.gwas_dir}/chr{num_chr}/plink_filtered_chr{num_chr}",
+                    "--memory",
+                    "80000",
+                    "--chr-set",
+                    "29",
+                    "--blocks",
+                    "no-pheno-req",
+                    "--out",
+                    f"{self.gwas_dir}/chr{num_chr}/snps_blocks",
+                ]
+            )
+        # df = pd.read_csv(str(filepath.with_suffix(".ld")), sep=" ")
+
 
 if __name__ == "__main__":
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -638,3 +699,4 @@ if __name__ == "__main__":
     cmd.pre_gwas()
     cmd.pre_gwas_merge()
     cmd.gwas()
+    cmd.gwas_analysis()
