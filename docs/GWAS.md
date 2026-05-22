@@ -15,7 +15,7 @@
 /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/plink/plink --bfile plink_two_samples_zaleski_bulls-1300 --hardy --out zaleski_bulls-1300 --cow --memory 8000
 
 
-/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/plink/plink --vcf two_samples_usa_bulls-1300.vcf.gz --make-bed --out plink_two_samples_usa_bulls-1300 --cow --memory 8000 --double-id 
+/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/plink/plink --vcf two_samples_usa_bulls-1300.vcf.gz --make-bed --out plink_two_samples_usa_bulls-1300 --cow --memory 8000 --double-id
 
 /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/plink/plink --bfile plink_two_samples_usa_bulls-1300 --hardy --out usa_bulls-1300 --cow --memory 8000
 

@@ -1,6 +1,6 @@
 # Основные действия
 ## Архивирование:
-```bash 
+```bash
 /opt/tools/bin/bgzip file_name.vcf
 ```
 
@@ -80,6 +80,3 @@ shuf all_my_samples.txt > shuffled_samples.txt
 head -n 1000 shuffled_samples.txt > group1_samples.txt
 tail -n 1000 shuffled_samples.txt > group2_samples.txt
 ```
-
-
-

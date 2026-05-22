@@ -1,12 +1,10 @@
+import json
 import pprint
 import sys
-import json
 import time
-
-
-from urllib.parse import urlparse, urlencode
-from urllib.request import urlopen, Request
 from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 class EnsemblRestClient(object):

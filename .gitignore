@@ -6,4 +6,4 @@ results/**
 tests/results/**
 notebooks/archive/**
 **/**/__pycache__
-.mypy_cache
+.*_cache

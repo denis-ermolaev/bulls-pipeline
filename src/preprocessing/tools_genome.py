@@ -1,6 +1,7 @@
+import os
+
 import pysam
 from dotenv import load_dotenv
-import os
 
 # Путь к референсному геному
 # reference_genome_path = "data/old_reference/Bos_taurus.UMD3.1.dna.toplevel.fa"
@@ -98,10 +99,10 @@ if __name__ == "__main__":
 
     print("Проверка 1.2 и 2.0 референса")
 
-    print(get_ref_base("24", 997)) # A
+    print(get_ref_base("24", 997))  # A
 
-    print(get_ref_base("24", 1025)) # G
+    print(get_ref_base("24", 1025))  # G
 
-    print(get_ref_base("24", 1027)) # T
+    print(get_ref_base("24", 1027))  # T
 
-    print(get_ref_base("24", 2700)) # A
+    print(get_ref_base("24", 2700))  # A

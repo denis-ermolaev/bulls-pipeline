@@ -1,17 +1,14 @@
-import pandas as pd
-import os
-from manage_project_files import process_archives
-import tools_genome
-import pysam
-from pathlib import Path
-from dotenv import load_dotenv
-
-from tools_bash import CMD
-
-from tqdm import tqdm
-
 import logging
+import os
+from pathlib import Path
 
+import pandas as pd
+import pysam
+import tools_genome
+from dotenv import load_dotenv
+from manage_project_files import process_archives
+from tools_bash import CMD
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 tqdm.pandas()  # подключить поддержку progress_apply

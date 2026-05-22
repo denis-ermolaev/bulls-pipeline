@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import csv
-import sys
 import os
+import sys
 
 
 def convert_map(input_csv, output_dir="."):
@@ -17,7 +17,7 @@ def convert_map(input_csv, output_dir="."):
 
     with open(input_csv, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f, delimiter=",", quotechar='"')
-        header = next(reader)  # пропускаем заголовок
+        next(reader)  # пропускаем заголовок
 
         for row_num, row in enumerate(reader, start=2):
             if not row or all(cell.strip() == "" for cell in row):
@@ -67,7 +67,7 @@ def convert_map(input_csv, output_dir="."):
     # Записываем файлы для каждой хромосомы
     for chr_id, lines in chromosomes.items():
         # Имя файла: chr1.map, chr2.map, ... chrX.map и т.д.
-        lines.sort(key=lambda l: int(l.split("\t")[3]))
+        lines.sort(key=lambda x: int(x.split("\t")[3]))
         out_file = os.path.join(output_dir, f"chr{chr_id}.map")
         with open(out_file, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")

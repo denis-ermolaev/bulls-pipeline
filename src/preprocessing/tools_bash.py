@@ -1,18 +1,16 @@
-from scipy.stats import chi2
-import re
 import logging
 import os
+import re
 import subprocess
-from pathlib import Path
-
-import pandas as pd
-import numpy as np
-from dotenv import load_dotenv
-from tqdm import tqdm
-
 from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Callable, List
 
-from typing import Callable, Any, List, cast
+import numpy as np
+import pandas as pd
+from dotenv import load_dotenv
+from scipy.stats import chi2
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -297,8 +295,8 @@ class CMD:
         for column in ["Yield", "Fat", "Protein"]:
             df_phenotype[column] = df_phenotype[column].fillna("NA")
         # пример на Python
-        from scipy.stats import rankdata, norm
         import numpy as np
+        from scipy.stats import norm, rankdata
 
         df_phenotype["Yield_norm"] = norm.ppf(
             (rankdata(df_phenotype["Yield"]) - 0.5) / len(df_phenotype)

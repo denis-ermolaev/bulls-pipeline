@@ -16,12 +16,18 @@ dependencies = [
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
+    "pre-commit>=4.6.0",
+    "pre-commit-hooks>=6.0.0",
+    "ruff>=0.15.14",
+    "ty>=0.0.38",
+    "uv>=0.11.16",
 ]
 [tool.ty.environment]
 python-version = "3.10"
 [tool.ty.rules]
 invalid-argument-type = "ignore"
 no-matching-overload = "ignore"
-not-subscriptable = "ignore" 
-
-
+not-subscriptable = "ignore"
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

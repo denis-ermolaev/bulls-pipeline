@@ -1,12 +1,13 @@
 import glob
-import zipfile
 import gzip
-from dotenv import load_dotenv
-import os
 import logging
+import os
+import zipfile
 
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
 
 def process_archives(input_root, output_root):
     """
@@ -54,7 +55,9 @@ def process_archives(input_root, output_root):
                     ) or os.path.basename(internal_file_name).startswith("._")
 
                     if is_macos_system_file:
-                        logger.debug(f"-> Пропускаю системный файл: {internal_file_name}")
+                        logger.debug(
+                            f"-> Пропускаю системный файл: {internal_file_name}"
+                        )
                         continue  # Переходим к следующему файлу в архиве
 
                     # Проверяем, соответствует ли файл нашему критерию
@@ -69,7 +72,9 @@ def process_archives(input_root, output_root):
                             )
                             total_skipped += 1
                             continue  # Переходим к следующему файлу
-                        logger.debug(f"-> Найден файл: {internal_file_name}. Обработка...")
+                        logger.debug(
+                            f"-> Найден файл: {internal_file_name}. Обработка..."
+                        )
                         # Извлекаем содержимое файла в память (в виде байтов)
                         with archive.open(internal_file_name) as file_in_zip:
                             file_content = file_in_zip.read()
@@ -95,18 +100,18 @@ if __name__ == "__main__":
     load_dotenv()
 
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    
+
     logging.basicConfig(
         level=getattr(logging, log_level),
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%H:%M:%S'
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     input_directory = os.getenv("PATH_TO_RAW")
     output_directory = os.getenv("PATH_TO_PREPARED")
 
     # TEST MODE
-    test_mode = True if os.getenv('TEST_MODE', 'False') == "True" else False
+    test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
     if test_mode:
         input_directory = os.getenv("PATH_TO_RAW_TEST")
         output_directory = os.getenv("PATH_TO_PREPARED_TEST")
