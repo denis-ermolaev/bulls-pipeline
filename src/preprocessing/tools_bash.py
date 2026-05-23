@@ -625,11 +625,11 @@ class CMD:
                 "--chr-set",
                 "29",
                 "--snp",
-                "13_60567073_T_C",
+                "13_61286033_T_C",
                 "--recode",
                 "A",
                 "--out",
-                f"{self.gwas_dir}/13_60567073_T_C_top_marker_genotype",
+                f"{self.gwas_dir}/13_61286033_T_C_top_marker_genotype",
             ]
         )
 

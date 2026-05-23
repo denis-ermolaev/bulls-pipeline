@@ -1,5 +1,4 @@
 repos:
-  # Локальные версии хуков (установлены через pip)
   - repo: local
     hooks:
       - id: trailing-whitespace
@@ -39,7 +38,6 @@ repos:
         language: system
         types: [python]
 
-  # Ruff: линтинг + форматирование (используем uv run для запуска из venv)
   - repo: local
     hooks:
       - id: ruff-check
@@ -54,7 +52,6 @@ repos:
         language: system
         types: [python]
 
-  # ty: тайп-чекер
   - repo: local
     hooks:
       - id: ty
