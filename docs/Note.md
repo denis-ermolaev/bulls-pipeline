@@ -80,3 +80,6 @@ for f in $(cat merge_list.txt); do
 done
 
 bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/plink_filtered_chr24 --chr-set 29 --memory 80000 --blocks no-pheno-req --out /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/snps_blocks
+
+
+bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged --chr-set 29 --memory 80000 --snp 13_60567073_T_C --recode A --out top_marker_genotype

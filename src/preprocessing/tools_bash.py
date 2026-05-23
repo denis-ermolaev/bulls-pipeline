@@ -1,7 +1,9 @@
 import logging
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Callable, List
@@ -566,6 +568,70 @@ class CMD:
                 f"{self.gwas_dir}/merged_prune",
             ]
         )
+        # het
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{self.gwas_dir}/merged",
+                "--memory",
+                "80000",
+                "--chr-set",
+                "29",
+                "--het",
+                "--out",
+                f"{self.gwas_dir}/het_results",
+            ]
+        )
+        # Runs of Homozygosity
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{self.gwas_dir}/merged",
+                "--memory",
+                "80000",
+                "--chr-set",
+                "29",
+                "--homozyg",
+                "--homozyg-window-snp",
+                "50",
+                "--homozyg-window-het",
+                "1",
+                "--homozyg-window-missing",
+                "5",
+                "--homozyg-density",
+                "1000",
+                "--homozyg-gap",
+                "1000",
+                "--homozyg-kb",
+                "1000",
+                "--homozyg-snp",
+                "100",
+                "--out",
+                f"{self.gwas_dir}/roh_results",
+            ]
+        )
+        # TODO: вынести в отдельную ф-ю
+        # Получение инфы о значимых в GWAS признаках
+        # bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged --chr-set 29 --memory 80000 --snp 13_60567073_T_C --recode A --out top_marker_genotype
+        self.run_command(
+            [
+                self.plink,
+                "--bfile",
+                f"{self.gwas_dir}/merged",
+                "--memory",
+                "80000",
+                "--chr-set",
+                "29",
+                "--snp",
+                "13_60567073_T_C",
+                "--recode",
+                "A",
+                "--out",
+                f"{self.gwas_dir}/13_60567073_T_C_top_marker_genotype",
+            ]
+        )
 
     def gwas(self):
         if not Path(f"{self.gwas_dir}/step1_results_pred.list").exists():
@@ -619,6 +685,147 @@ class CMD:
                     f"{self.gwas_dir}/final_gwas_results",
                 ]
             )
+
+    def _permutation_test_handle_file(self):
+        self._input_ramdisk = "/dev/shm/permutation_test_gwas_inputs"
+        if not Path("/dev/shm/permutation_test_gwas_inputs").exists():
+            os.makedirs(self._input_ramdisk, exist_ok=True)
+
+        if not Path("/dev/shm/permutation_test_gwas_inputs/merged.bed").exists():
+            bed_src_merged = Path(f"{self.gwas_dir}/merged")
+            for ext in [".bed", ".bim", ".fam", ".nosex"]:
+                shutil.copy(str(bed_src_merged) + ext, self._input_ramdisk)
+        self._bed_merged_ram = str(Path(self._input_ramdisk) / "merged")
+
+        if not Path("/dev/shm/permutation_test_gwas_inputs/merged_prune.bed").exists():
+            bed_src_prune = Path(f"{self.gwas_dir}/merged_prune")
+            for ext in [".bed", ".bim", ".fam", ".nosex"]:
+                shutil.copy(str(bed_src_prune) + ext, self._input_ramdisk)
+        self._bed_prune_ram = str(Path(self._input_ramdisk) / "merged_prune")
+
+        if not Path("/dev/shm/permutation_test_gwas_inputs/covariates.txt").exists():
+            covar_src = Path(f"{self.output_dir}/covariates.txt")
+            shutil.copy(covar_src, self._input_ramdisk)
+        self._covar_ram = str(Path(self._input_ramdisk) / "covariates.txt")
+
+        if not Path("/dev/shm/permutation_test_gwas_inputs/phenotype.txt").exists():
+            covar_src = Path(f"{self.output_dir}/phenotype.txt")
+            shutil.copy(covar_src, self._input_ramdisk)
+        self._pheno_ram = str(Path(self._input_ramdisk) / "phenotype.txt")
+
+    def _permutation_test(self, n_perm=1000):
+        streams = 10
+        objects = list(range(0, streams)) * int((n_perm / streams))
+        print(objects)
+        self._permutation_test_handle_file()
+        permuted_pvals = self.parallel_run(self._one_permutation, objects, streams)
+
+        threshold = np.percentile(permuted_pvals, 5)
+        print(f"Empirical significance threshold (alpha=0.05): {threshold}")
+
+        permuted_pvals = []
+        for filepath in sorted(self.gwas_dir.glob("min_p_value_n*.csv")):
+            try:
+                raw = filepath.read_text()
+                if raw:  # не пустой файл
+                    permuted_pvals.extend(map(float, raw.split()))
+            except (ValueError, IOError) as _:
+                pass
+
+        threshold = np.percentile(permuted_pvals, 5)
+        print(f"(Общие) Empirical significance threshold (alpha=0.05): {threshold}")
+
+        return threshold
+
+    def _one_permutation(self, n_process):
+        def read_regenie(filepath):
+            """Чтение файла REGENIE, восстановление P и -log10(P)."""
+            df = pd.read_csv(filepath, sep="\s+")
+            if "LOG10P" in df.columns:
+                df["P"] = np.power(10, -df["LOG10P"])
+            elif "PVAL" in df.columns:
+                df["P"] = df["PVAL"]
+            elif "CHISQ" in df.columns:
+                df["P"] = chi2.sf(df["CHISQ"], 1)
+            else:
+                raise ValueError("Нужны столбцы LOG10P, PVAL или CHISQ.")
+            df["LOGP"] = -np.log10(df["P"])
+            return df
+
+        self._permutation_test_handle_file()
+        # self._pheno_ram
+        # self._covar_ram
+        # self._bed_prune_ram
+        # self._bed_merged_ram
+        tmp_dir = tempfile.mkdtemp(dir="/dev/shm", prefix=f"perm_{n_process}_")
+        try:
+            pheno_df = pd.read_csv(self._pheno_ram, sep=" ")
+            pheno_shuffled = pheno_df.copy()
+            pheno_shuffled["Yield"] = np.random.permutation(
+                pheno_shuffled["Yield"].values
+            )
+            pheno_shuffled[["FID", "IID", "Yield", "Fat", "Protein"]].to_csv(
+                f"{tmp_dir}/phenotype_perm{n_process}.txt",
+                sep="\t",
+                index=False,
+            )
+            self.run_command(
+                [
+                    self.regenie,
+                    "--step",
+                    "1",
+                    "--bed",
+                    self._bed_prune_ram,
+                    "--phenoFile",
+                    f"{tmp_dir}/phenotype_perm{n_process}.txt",
+                    "--covarFile",
+                    self._covar_ram,
+                    "--nauto",
+                    "29",
+                    "--bsize",
+                    "1000",
+                    # "--lowmem",
+                    "--threads",
+                    "4",
+                    "--out",
+                    f"{tmp_dir}/step1_results_perm_n{n_process}",
+                ]
+            )
+            # Второй этап GWAS
+            self.run_command(
+                [
+                    self.regenie,
+                    "--step",
+                    "2",
+                    "--bed",
+                    self._bed_merged_ram,
+                    "--phenoFile",
+                    f"{tmp_dir}/phenotype_perm{n_process}.txt",
+                    "--covarFile",
+                    self._covar_ram,
+                    "--nauto",
+                    "29",
+                    "--bsize",
+                    "400",
+                    "--threads",
+                    "4",
+                    "--pred",
+                    f"{tmp_dir}/step1_results_perm_n{n_process}_pred.list",
+                    "--out",
+                    f"{tmp_dir}/final_gwas_results_perm{n_process}",
+                ]
+            )
+            res = read_regenie(
+                f"{tmp_dir}/final_gwas_results_perm{n_process}_Yield.regenie"
+            )
+            min_p = res["P"].min()  # если колонка называется P
+            with open(f"{self.gwas_dir}/min_p_value_n{n_process}.csv", "a") as f:
+                f.write(f"{min_p}\n")
+            return min_p
+        finally:
+            shutil.rmtree(
+                tmp_dir, ignore_errors=True
+            )  # очистка сразу после использования
 
     def gwas_analysis(self):
         gwas_result = [
@@ -698,3 +905,4 @@ if __name__ == "__main__":
     cmd.pre_gwas_merge()
     cmd.gwas()
     cmd.gwas_analysis()
+    cmd._permutation_test(10)

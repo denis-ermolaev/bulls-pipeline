@@ -83,6 +83,102 @@ class EnsemblRestClient(object):
             return genes
         return None
 
+    def get_genes_info(self, gene_ids):
+        """
+        Получает информацию о генах по списку Ensembl ID.
+
+        Параметры
+        ----------
+        gene_ids : list
+            Список Ensembl ID генов (например, ['ENSBTAG00000014930', ...]).
+
+        Возвращает
+        -------
+        dict
+            Словарь {gene_id: информация_о_гене}.
+            Если ген не найден, значение будет пустым словарём.
+        """
+        if not gene_ids:
+            return {}
+
+        # Ensembl POST lookup/id поддерживает до 1000 идентификаторов за раз
+        # Разбиваем на батчи, если генов больше
+        batch_size = 100
+        all_results = {}
+
+        for i in range(0, len(gene_ids), batch_size):
+            batch = gene_ids[i : i + batch_size]
+
+            payload = json.dumps({"ids": batch})
+
+            # Нужно расширить метод perform_rest_action для поддержки POST с телом
+            # Но в вашем текущем классе его нет, поэтому используем urllib.request напрямую
+            data = self._post_lookup(payload)
+
+            if data:
+                for gene_id in batch:
+                    if gene_id in data:
+                        all_results[gene_id] = data[gene_id]
+                    else:
+                        all_results[gene_id] = {}
+            else:
+                for gene_id in batch:
+                    all_results[gene_id] = {}
+
+        return all_results
+
+    def _post_lookup(self, payload):
+        """
+        Отправляет POST-запрос на /lookup/id.
+
+        Параметры
+        ----------
+        payload : str
+            JSON-строка с телом запроса.
+
+        Возвращает
+        -------
+        dict или None
+            Ответ API в виде словаря или None в случае ошибки.
+        """
+        endpoint = "/lookup/id"
+        url = self.server + endpoint
+
+        # Rate limiting
+        if self.req_count >= self.reqs_per_sec:
+            delta = time.time() - self.last_req
+            if delta < 1:
+                time.sleep(1 - delta)
+            self.last_req = time.time()
+            self.req_count = 0
+
+        try:
+            request = Request(
+                url,
+                data=payload.encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            response = urlopen(request)
+            content = response.read()
+            self.req_count += 1
+            if content:
+                return json.loads(content)
+        except HTTPError as e:
+            if e.code == 429 and "Retry-After" in e.headers:
+                retry = float(e.headers["Retry-After"])
+                time.sleep(retry)
+                return self._post_lookup(payload)
+            else:
+                sys.stderr.write(
+                    "Request failed for {0}: Status code: {1.code} Reason: {1.reason}\n".format(
+                        endpoint, e
+                    )
+                )
+        return None
+
 
 def run(snp_chr, snp_pos, start, end):
     # TODO: Понять как работать с API
@@ -121,5 +217,31 @@ def run(snp_chr, snp_pos, start, end):
             print("В регионе нет белок-кодирующих генов.")
 
 
+def get_gene_info_by_id(gene_ids):
+    """
+    gene_ids = [
+        "ENSBTAG00000069793",
+        "ENSBTAG00000014930",  # MYLK2
+        "ENSBTAG00000009206",  # FOXS1
+        "ENSBTAG00000006526",  # BCL2L1
+        "ENSBTAG00000016169",  # ID1
+    ]
+    """
+    client = EnsemblRestClient()
+
+    genes_info = client.get_genes_info(gene_ids)
+
+    return genes_info
+
+
 if __name__ == "__main__":
     run(3, 49550821, 49520821, 49580821)
+    get_gene_info_by_id(
+        gene_ids=[
+            "ENSBTAG00000069793",
+            "ENSBTAG00000014930",  # MYLK2
+            "ENSBTAG00000009206",  # FOXS1
+            "ENSBTAG00000006526",  # BCL2L1
+            "ENSBTAG00000016169",  # ID1
+        ]
+    )

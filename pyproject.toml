@@ -12,6 +12,8 @@ dependencies = [
     "scipy>=1.15.3",
     "tqdm>=4.67.3",
     "scikit-learn>=1.7.2",
+    "seaborn>=0.13.2",
+    "statsmodels>=0.14.6",
 ]
 [dependency-groups]
 dev = [
