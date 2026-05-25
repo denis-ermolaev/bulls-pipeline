@@ -43,6 +43,7 @@ class CMD:
         self.plink = os.getenv("PLINK")
         self.beagle = os.getenv("BEAGLE")
         self.regenie = os.getenv("REGENIE")
+        self.magma = os.getenv("MAGMA")
 
         # Переопределение путей для TEST режима
         test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
@@ -599,15 +600,15 @@ class CMD:
                 "--homozyg-window-het",
                 "1",
                 "--homozyg-window-missing",
-                "5",
+                "2",
                 "--homozyg-density",
-                "1000",
+                "50",
                 "--homozyg-gap",
-                "1000",
+                "100",
                 "--homozyg-kb",
                 "1000",
                 "--homozyg-snp",
-                "100",
+                "50",
                 "--out",
                 f"{self.gwas_dir}/roh_results",
             ]

@@ -179,6 +179,84 @@ class EnsemblRestClient(object):
                 )
         return None
 
+    def _post_lookup_symbol(self, payload):
+        """
+        Отправляет POST-запрос на /lookup/symbol/:species.
+        Тело запроса: {"symbols": ["FOXS1", ...]}.
+        Возвращает словарь {symbol: {информация о гене}} или None.
+        """
+        endpoint = f"/lookup/symbol/{self.species}"
+        url = self.server + endpoint
+
+        # Rate limiting (точно как в _post_lookup)
+        if self.req_count >= self.reqs_per_sec:
+            delta = time.time() - self.last_req
+            if delta < 1:
+                time.sleep(1 - delta)
+            self.last_req = time.time()
+            self.req_count = 0
+
+        try:
+            request = Request(
+                url,
+                data=payload.encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            response = urlopen(request)
+            content = response.read()
+            self.req_count += 1
+            if content:
+                return json.loads(content)
+        except HTTPError as e:
+            if e.code == 429 and "Retry-After" in e.headers:
+                retry = float(e.headers["Retry-After"])
+                time.sleep(retry)
+                return self._post_lookup_symbol(payload)
+            else:
+                sys.stderr.write(
+                    "Request failed for {0}: Status code: {1.code} Reason: {1.reason}\n".format(
+                        endpoint, e
+                    )
+                )
+        return None
+
+    def get_ensembl_ids_by_symbols(self, symbols):
+        """
+        Возвращает словарь {symbol: ensembl_gene_id} для заданных символов генов.
+        Неизвестные символы игнорируются (в словаре отсутствуют).
+
+        Параметры
+        ----------
+        symbols : list of str
+            Список символов генов (например, ["FOXS1", "MYLK2", ...]).
+
+        Возвращает
+        -------
+        dict
+            {symbol: ensembl_id}
+        """
+        if not symbols:
+            return {}
+
+        # Разбиваем на батчи (API принимает до 1000 символов за раз)
+        batch_size = 1000
+        result = {}
+
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i : i + batch_size]
+            payload = json.dumps({"symbols": batch})
+            data = self._post_lookup_symbol(payload)
+
+            if data:
+                for symbol, gene_info in data.items():
+                    if "id" in gene_info:
+                        result[symbol] = gene_info["id"]
+
+        return result
+
 
 def run(snp_chr, snp_pos, start, end):
     # TODO: Понять как работать с API
@@ -243,5 +321,10 @@ if __name__ == "__main__":
             "ENSBTAG00000009206",  # FOXS1
             "ENSBTAG00000006526",  # BCL2L1
             "ENSBTAG00000016169",  # ID1
+            "ENSBTAG00000007930",  # NCOA6
         ]
     )
+
+    client = EnsemblRestClient()
+
+    print(client.get_ensembl_ids_by_symbols(["MYLK2", "FOXS1", "NCOA6"]))
