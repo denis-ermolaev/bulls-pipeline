@@ -31,13 +31,6 @@ run: stop
 
 run_jupyter:
 	podman run --rm -it \
-		-p 8888:8888 \
-		$(FLAGS) \
-		-v .:/app \
-		$(IMAGE_NAME) \
-		jupyter notebook --ip=0.0.0.0 --allow-root --no-browser
-run_jupyter:
-	podman run --rm -it \
 		-p 127.0.0.1:8888:8888 \
 		$(FLAGS) \
 		-v .:/app \
@@ -45,7 +38,6 @@ run_jupyter:
 		jupyter notebook --ip=0.0.0.0 --allow-root --no-browser --NotebookApp.token='' --NotebookApp.password=''
 
 stop:
-	stop:
 	podman rm -f $(CONTAINER_NAME) 2>/dev/null || true
 
 enter:
@@ -53,6 +45,9 @@ enter:
 
 logs:
 	podman logs -f $(CONTAINER_NAME)
+
+status:
+	podman ps --filter "name=$(CONTAINER_NAME)"
 
 stats:
 	podman stats $(CONTAINER_NAME)
