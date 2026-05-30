@@ -1,7 +1,9 @@
 ## Подготовка
 ### podman
 
-`sudo apt-get -y install podman`
+```bash
+sudo apt-get -y install podman
+```
 
 - Контейниризация для первоначальной настройки проекта (подгрузка зависимостей: data и bin папки), **для запуска скриптов**, для Jupyter notebook
 
