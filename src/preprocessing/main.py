@@ -101,25 +101,6 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
                 record.samples[sample_id]["GT"] = (None, None)
             else:
                 record.samples[sample_id]["GT"] = gt
-            # [A/B] ["T"/"G"]
-            # 0 - REF, 1 - ALT
-            # if IlmnStrand == "BOT":
-            #     SNP_B, SNP_A = SNP_A, SNP_B # [B/A]
-            # if RefStrand == "-":
-            #     SNP_A = complementarity[SNP_A]
-            #     SNP_B = complementarity[SNP_B]
-            # SNP_normal = {"A": SNP_A, "B": SNP_B}
-
-            # allele1 = 0 if SNP_normal[row.Allele1_AB] == REF else 1
-            # allele2 = 0 if SNP_normal[row.Allele2_AB] == REF else 1
-            # # Сортируем для создания нефазированного генотипа (0/1)
-            # # Т.к неизвестно какой от отца, а какой от матери
-            # gt = tuple(sorted((allele1, allele2)))
-            # if REF not in (SNP_A, SNP_B):
-            #     logger.error(f"Предупреждение: REF {REF} не совпадает с аллелями {SNP_A}/{SNP_B} для SNP {row.SNP}")
-            #     record.samples[sample_id]["GT"] = (None, None)
-            # else:
-            #     record.samples[sample_id]["GT"] = gt
         else:
             record.samples[sample_id]["GT"] = (None, None)
 

@@ -15,6 +15,11 @@ dependencies = [
     "seaborn>=0.13.2",
     "statsmodels>=0.14.6",
     "statannotations>=0.7.2",
+    "pyarrow>=24.0.0",
+    "pandas-plink>=2.2.9",
+    "lxml>=6.1.1",
+    "html5lib>=1.1",
+    "mygene>=3.2.2",
 ]
 [dependency-groups]
 dev = [

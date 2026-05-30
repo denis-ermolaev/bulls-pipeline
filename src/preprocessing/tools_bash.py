@@ -34,6 +34,11 @@ class CMD:
         self.gwas_dir = Path(os.getenv("PATH_GWAS"))
         """Папка с результатами gwas"""
 
+        self.magma_dir = Path(
+            "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma"
+        )
+        """Папка с результатами magma"""
+
         # Пути к конкретным файлам
         self.merged_vcf_file = self.output_dir / "merged.vcf.gz"
 
@@ -204,9 +209,9 @@ class CMD:
                 "--maf",
                 "0.01",  # Для более точного расчёта родства ?
                 "--geno",
-                "0.5",
+                "0.05",
                 "--mind",
-                "0.5",
+                "0.05",
                 "--make-bed",
                 "--out",
                 f"{str(self.output_dir)}/clean_{out_name}",
@@ -245,13 +250,13 @@ class CMD:
                 "50000",
                 "--chr-set",
                 "31",
-                "--chr",
-                "1-29",
+                # "--chr",
+                # "1-29",
                 "--extract",
                 f"{str(self.output_dir) + '/prunning_list'}.prune.in",
                 "--make-bed",
                 "--out",
-                f"{str(self.output_dir)}/clean_{out_name}_1_29_prune",
+                f"{str(self.output_dir)}/clean_{out_name}_1_31_prune",
             ]
         )
 
@@ -260,7 +265,7 @@ class CMD:
             [
                 self.plink,
                 "--bfile",
-                f"{str(self.output_dir)}/clean_{out_name}",
+                f"{str(self.output_dir)}/clean_{out_name}_1_31_prune",
                 "--memory",
                 "5000",
                 "--chr-set",
@@ -306,6 +311,10 @@ class CMD:
         )
         df_phenotype["random_phenotype"] = np.random.normal(0, 1, len(df_phenotype))
         df_phenotype.to_csv(f"{self.output_dir}/phenotype.txt", sep=" ", index=False)
+        # Образцы с генотипами
+        df_phenotype[["FID", "IID"]].to_csv(
+            f"{self.output_dir}/sample_with_phenotype.txt", sep=" ", index=False
+        )
 
     def imputation(self):
         """
@@ -472,6 +481,26 @@ class CMD:
                     f"{output_dir}/plink_chr{num_chr}",
                 ]
             )
+            self.run_command(
+                [
+                    self.plink,
+                    "--bfile",
+                    f"{output_dir}/plink_chr{num_chr}",
+                    "--memory",
+                    "80000",
+                    "--chr-set",
+                    "29",
+                    "--maf",
+                    "0.1",
+                    "--geno",
+                    "0.05",
+                    "--mind",
+                    "0.05",
+                    "--make-bed",
+                    "--out",
+                    f"{output_dir}/plink_all_sample_filtered_chr{num_chr}",
+                ]
+            )
         if (
             not Path(f"{output_dir}/plink_filtered_chr{num_chr}")
             .with_suffix(".bed")
@@ -487,6 +516,8 @@ class CMD:
                     "80000",
                     "--chr-set",
                     "29",
+                    "--keep",
+                    f"{self.output_dir}/sample_with_phenotype.txt",
                     "--maf",
                     "0.1",
                     "--geno",
@@ -653,7 +684,7 @@ class CMD:
                     "29",
                     "--bsize",
                     "1000",
-                    "--lowmem",
+                    # "--lowmem",
                     "--threads",
                     "32",
                     "--out",
@@ -828,7 +859,7 @@ class CMD:
                 tmp_dir, ignore_errors=True
             )  # очистка сразу после использования
 
-    def gwas_analysis(self):
+    def post_gwas(self):
         gwas_result = [
             file
             for file in self.gwas_dir.iterdir()
@@ -861,6 +892,128 @@ class CMD:
 
         self.parallel_run(self._ld_block, objects, 29)
 
+        if not self.magma_dir.exists():
+            self.magma_dir.mkdir()
+
+        import gzip
+
+        gtf_file = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/data/Bos_taurus.ARS-UCD2.0.115.gtf.gz"
+        output_file = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_genes.loc"
+
+        # Список каноничных хромосом, чтобы отсечь геномный "мусор"
+        valid_chroms = [str(i) for i in range(1, 30)] + ["X", "Y", "MT"]
+
+        with gzip.open(gtf_file, "rt") as f_in, open(output_file, "w") as f_out:
+            for line in f_in:
+                # Пропускаем технические комментарии
+                if line.startswith("#"):
+                    continue
+
+                columns = line.strip().split("\t")
+
+                # Нам нужны только строки, описывающие целые гены
+                if columns[2] == "gene":
+                    chrom = columns[0]
+
+                    # Фильтруем нестандартные скаффолды
+                    if chrom not in valid_chroms:
+                        continue
+
+                    start = columns[3]
+                    end = columns[4]
+                    attributes = columns[8]
+
+                    # Вырезаем Ensembl ID гена из колонки атрибутов
+                    if 'gene_id "' in attributes:
+                        gene_id = attributes.split('gene_id "')[1].split('"')[0]
+                        # Записываем в формате MAGMA: ID Хромосома Старт Конец
+                        f_out.write(f"{gene_id} {chrom} {start} {end}\n")
+
+        print(f"Файл {output_file} успешно создан!")
+
+        # awk '{print $2, $1, $4}' /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged.bim > /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/snps.loc
+
+        self.run_command(
+            [
+                "sh",
+                "-c",
+                "awk '{print $2, $1, $4}' /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged.bim > /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/snps.loc",
+            ]
+        )
+
+        # /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/magma/magma --annotate window=50,50 nonhuman \
+        # --snp-loc /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/snps.loc \
+        # --gene-loc /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_genes.loc \
+        # --out /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_annotation
+
+        self.run_command(
+            [
+                self.magma,
+                "--annotate",
+                "window=50,50",
+                "nonhuman",
+                "--snp-loc",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/snps.loc",
+                "--gene-loc",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_genes.loc",
+                "--out",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_annotation",
+            ]
+        )
+
+        # Путь к твоему файлу REGENIE
+        regenie_path = "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/final_gwas_results_Yield.regenie"
+
+        print("Читаем REGENIE файл... (это может занять некоторое время)")
+        # REGENIE разделяет колонки пробелами/табуляцией
+        df = pd.read_csv(regenie_path, sep=r"\s+")
+
+        # 1. Переименовываем ID в SNP для MAGMA
+        df = df.rename(columns={"ID": "SNP"})
+
+        # 2. Пересчитываем LOG10P в обычное P-value (P = 10^-LOG10P)
+        # Важно: MAGMA падает, если P ровно равно 0. Если у тебя есть сверхзначимые SNP (LOG10P > 300),
+        # обычный float64 округлит их до нуля. Поэтому мы ограничиваем LOG10P значением 300 (P = 1e-300).
+        df["LOG10P_capped"] = df["LOG10P"].clip(upper=300)
+        df["P"] = 10 ** (-df["LOG10P_capped"])
+
+        # 3. Отбираем только нужные колонки.
+        # Если в файле есть колонка 'N' (размер выборки для каждого SNP), заберем и её.
+        columns_to_save = ["SNP", "P"]
+        if "N" in df.columns:
+            columns_to_save.append("N")
+
+        # Сохраняем в готовый файл gwas_pvalues.txt
+        df[columns_to_save].to_csv(
+            "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/gwas_pvalues.txt",
+            sep="\t",
+            index=False,
+        )
+        print("Готово! Файл gwas_pvalues.txt успешно создан.")
+
+        #     /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/bin/magma/magma --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged \
+        #    --gene-annot /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_annotation.genes.annot \
+        #    --pval /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/gwas_pvalues.txt ncol=N \
+        #    --gene-model multi \
+        #    --out /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_gene_gwas_multi
+
+        self.run_command(
+            [
+                self.magma,
+                "--bfile",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/merged",
+                "--gene-annot",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_annotation.genes.annot",
+                "--pval",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/gwas_pvalues.txt",
+                "ncol=N",
+                "--gene-model",
+                "multi",
+                "--out",
+                "/scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/magma/cow_gene_gwas_multi",
+            ]
+        )
+
     def _ld_block(self, num_chr: int):
         # bin/plink/plink --bfile /scratch/storageA/zaleski_bulls/bulls-vcf-pipeline/results/gwas/chr24/plink_filtered_chr24
         # --chr-set 29 --memory 80000 --blocks no-pheno-req
@@ -874,7 +1027,7 @@ class CMD:
                 [
                     self.plink,
                     "--bfile",
-                    f"{self.gwas_dir}/chr{num_chr}/plink_filtered_chr{num_chr}",
+                    f"{self.gwas_dir}/chr{num_chr}/plink_all_sample_filtered_chr{num_chr}",
                     "--memory",
                     "80000",
                     "--chr-set",
@@ -905,5 +1058,5 @@ if __name__ == "__main__":
     cmd.pre_gwas()
     cmd.pre_gwas_merge()
     cmd.gwas()
-    cmd.gwas_analysis()
-    cmd._permutation_test(10)
+    cmd.post_gwas()
+    # cmd._permutation_test(1000)

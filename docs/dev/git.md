@@ -40,6 +40,16 @@
 - chore: обновить зависимости до последних стабильных версий
 - ci: добавить шаг проверки форматирования
 
+### **Области проекта**
+
+conv - конвертация в vcf
+meta - мета функциональности, над существующими модулями
+manage - управление файлами, их подготовка(В том числе конвертация карт рекомбинации)
+bash - модуль управления запуска внещних команд
+annot - модуль аннотации, обращения к внешним API
+
+### Команды
+
 ```bash
 git commit -m "feat(vcf): добавить парсинг мультиаллельных вариантов"
 
@@ -129,4 +139,38 @@ git rm -r --cached <папка>
 # Или удалить все, добавить все
 git rm -r --cached .
 git add .
+```
+
+
+```
+# Противоположно git add .
+git reset
+git restore --staged .
+
+# Для отдельного файла
+git reset file.txt
+# или
+git restore --staged file.txt
+```
+### Удалённый репозиторий
+
+```bash
+# Проверить текущий origin(Удалённый репозиторий)
+git remote -v
+# Изменить ссылку origin на другой url
+git remote set-url origin git@github.com:denis-ermolaev/final-work-Bioengineering-and-bioinformatics.git
+# Первая отправка - связь origin с main(master), в последующем просто git push
+git push -u origin main
+# Альтернативно, удалить origin и добавить новый
+git remote remove origin
+git remote add origin git@github.com:denis-ermolaev/final-work-Bioengineering-and-bioinformatics.git
+
+# Два удалённых репозитория
+git remote add personal https://github.com/username/personal-repo.git # Отдельная ссылка
+git push origin main # Два push
+git push personal main
+
+git remote set-url --add --push origin https://github.com/username/personal-repo.git # Две ссылки для origin
+git push origin main # Один push сразу в два репозитория
+
 ```

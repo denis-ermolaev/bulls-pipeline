@@ -1,0 +1,69 @@
+FROM debian:13-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# SECTION: Системные пакеты
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    curl \
+    git \
+    ca-certificates \
+    build-essential \
+    # Сборочные зависимости для samtools/bcftools (они же покроют либы для REGENIE):
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libcurl4-openssl-dev \
+    libncurses-dev \
+    # Рантайм для Java (Beagle):
+    default-jre \
+    # Рантайм для параллельных вычислений OpenMP (нужен REGENIE):
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Фиксируем версию uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
+
+WORKDIR /app
+
+# === НАСТРОЙКИ UV ===
+ENV UV_PYTHON=3.10 \
+    UV_COMPILE_BYTECODE=0 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+
+# 2. Установка Python-окружения по lock-файлу
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --no-install-project
+ENV PATH="/opt/venv/bin:$PATH"
+
+# SECTION: Сборка исходников
+# 3. Копируем архивы исходников samtools/bcftools
+COPY bin/bcftools-1.21.tar.bz2 bin/samtools-1.16.tar.bz2 /tmp/
+
+# 4. Сборка bcftools
+RUN tar --no-same-owner --no-same-permissions -xjvf /tmp/bcftools-1.21.tar.bz2 -C /tmp/ \
+    && cd /tmp/bcftools-1.21 \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) && make install
+
+# 5. Сборка samtools
+RUN tar --no-same-owner --no-same-permissions -xjvf /tmp/samtools-1.16.tar.bz2 -C /tmp/ \
+    && cd /tmp/samtools-1.16 \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) && make install \
+    && rm -rf /tmp/*
+
+# 6. Настройка путей для кастомных вызовов пайплайна
+RUN mkdir -p /opt/tools/bin /opt/tools/samtools-1.16 \
+    && ln -s /usr/local/bin/bcftools /opt/tools/bin/bcftools \
+    && ln -s /usr/local/bin/samtools /opt/tools/samtools-1.16/samtools
+
+# 7. Делаем контейнер полностью автономным
+# Копируем все файлы проекта (скрипты и бинарники plink/magma/regenie из bin/) внутрь образа
+# COPY . /app
+
+# Добавляем /app/bin в PATH, чтобы система видела regenie, magma, plink
+ENV PATH="/app/bin:${PATH}"
+
+CMD ["/bin/bash"]
