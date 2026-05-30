@@ -36,6 +36,13 @@ run_jupyter:
 		-v .:/app \
 		$(IMAGE_NAME) \
 		jupyter notebook --ip=0.0.0.0 --allow-root --no-browser
+run_jupyter:
+	podman run --rm -it \
+		-p 127.0.0.1:8888:8888 \
+		$(FLAGS) \
+		-v .:/app \
+		$(IMAGE_NAME) \
+		jupyter notebook --ip=0.0.0.0 --allow-root --no-browser --NotebookApp.token='' --NotebookApp.password=''
 
 stop:
 	stop:
