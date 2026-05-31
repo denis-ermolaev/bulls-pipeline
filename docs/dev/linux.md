@@ -1,3 +1,4 @@
+# Полезные команды
 ```bash
 less -SN файл-для-чтения
 ```
@@ -32,4 +33,22 @@ tmux kill-session -t session1
 # Завершить все сессии
 tmux kill-server
 
+```
+
+# Настройки
+## История
+```bash
+#.bashrc
+# История
+HISTSIZE=10000
+HISTFILESIZE=20000
+HISTCONTROL=ignoredups:erasedups
+shopt -s histappend
+
+# Синхронизация истории между окнами в реальном времени
+PROMPT_COMMAND="history -a; history -n; $PROMPT_COMMAND"
+
+# Поиск по истории через стрелочки (начни вводить команду и жми вверх)
+bind '"\e[A": history-search-backward'
+bind '"\e[B": history-search-forward'
 ```

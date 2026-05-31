@@ -28,12 +28,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 - `make build` - один раз в начале настройки проекта ИЛИ после изменения Dockerfile
 - `make run` - запуск podman контейнера
-- `make run_pipeline` - запустить пайплайн (Или отдельные модули `make tools_bash`)
+- `make run_pipeline` - запустить пайплайн (Или отдельные модули `make run_tools_bash`)
 - `make stop` - в конце работы, чтобы остановить контейнер
 
 
 
 Для dev дополнительно:
 
-- `make install_host` - установка python зависимостей
-- Работа с Jupyter внутри контейнера `make run_jupyter` -> адрес -> в vs code -> выбрать другое ядро -> существующий сервер -> вписать адрес
+- `make install_host` - установка python зависимостей на хост, для работы языкового сервера и т.п в vs code
+- Работа с Jupyter внутри контейнера `make run_jupyter` -> адрес в консоле -> в vs code -> выбрать другое ядро -> существующий jupyter сервер -> вписать адрес
+- Запуск тестов `make test`

@@ -77,8 +77,8 @@ git commit
 
 ```bash
 # 1. Старт
-git checkout main
-git pull origin main
+git checkout master
+git pull origin master # Потом просто git pull
 git checkout -b feat/new-plot
 
 # 2. Работа
@@ -93,8 +93,8 @@ git push -u origin feat/new-plot
 # 4. После одобрения (или самопроверки) нажимаем "Squash and merge" на сайте
 
 # 5. Очистка
-git checkout main
-git pull origin main
+git checkout master
+git pull origin master
 git branch -d feat/new-plot
 git push origin --delete feat/new-plot
 # git remote prune origin — удалит локальные ссылки на ветки, которые уже удалены на GitHub
