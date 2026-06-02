@@ -15,10 +15,11 @@ dependencies = [
     "statsmodels>=0.14.6",
     "statannotations>=0.7.2",
     "pyarrow>=24.0.0",
-    "pandas-plink>=2.2.9",
-    "lxml>=6.1.1",
-    "html5lib>=1.1",
-    "mygene>=3.2.2",
+    "pandas-plink>=2.2.9", # Работа с bed
+    "lxml>=6.1.1", # Чтение таблиц из html
+    "html5lib>=1.1", # Чтение таблиц из html
+    "mygene>=3.2.2", # Доступ к базам данных
+    "pydantic>=2.13.4",
 ]
 [dependency-groups]
 dev = [
@@ -27,7 +28,7 @@ dev = [
     "pre-commit-hooks>=6.0.0",
     "pytest>=9.0.3",
     "ruff>=0.15.14",
-    "ty>=0.0.38",
+    "ty>=0.0.42",
     "uv>=0.11.16",
 ]
 [tool.ty.environment]
@@ -40,6 +41,8 @@ not-subscriptable = "ignore"
 select = ["E", "F", "I"]
 ignore = ["E501"]
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["*_test.py", "*_tests.py"]
-addopts = "-p no:cacheprovider"
+addopts = [
+    "-p no:cacheprovider", # Не создавать кэш
+]
+testpaths = ["tests"] # Искать тесты в папке tests
+python_files = ["*_test.py", "*_tests.py"] # 001_simple_test.py

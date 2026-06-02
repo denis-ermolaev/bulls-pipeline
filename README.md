@@ -14,7 +14,7 @@ sudo apt-get -y install podman
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-Далее в папке проекта `uv sync` - для установки зависимостей
+Далее в папке проекта `uv sync` - для установки зависимостей и настройки виртуальной среды Python
 
 ### Настройки / Управление параметрами
 
@@ -38,3 +38,4 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 - `make install_host` - установка python зависимостей на хост, для работы языкового сервера и т.п в vs code
 - Работа с Jupyter внутри контейнера `make run_jupyter` -> адрес в консоле -> в vs code -> выбрать другое ядро -> существующий jupyter сервер -> вписать адрес
 - Запуск тестов `make test`
+- Периодически `make clean` - для удаления старых образов после `make build`

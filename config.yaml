@@ -1,0 +1,30 @@
+# pipeline:
+#   steps:
+#     - name: trim
+#       enabled: true
+#       tool: fastp
+#       params:
+#         quality: 20
+
+#     - name: align
+#       enabled: true
+#       tool: bwa
+#       params:
+#         threads: 8
+
+#     - name: variant_call
+#       enabled: false
+
+# config-driven execution / declarative pipeline
+# steps:
+#   - type: alignment
+#     engine: bwa
+#   - type: alignment
+#     engine: minimap2
+
+pipeline_steps:
+  - type: prepare_data
+    enabled: true
+    redo: false
+    input_dir: "tests/data/raw/"
+    output_dir: "tests/data/unpacked/"

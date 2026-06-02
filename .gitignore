@@ -7,3 +7,4 @@ tests/results/**
 notebooks/archive/**
 **/**/__pycache__
 .*_cache
+.cache

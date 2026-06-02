@@ -192,6 +192,7 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
 
 
 if __name__ == "__main__":
+    # 1. Конфигурация ----
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 
     logging.basicConfig(

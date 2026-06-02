@@ -6,5 +6,5 @@ def test_always_passes():
 
 
 def test_project_structure():
-    assert os.path.isdir("/app")  # проверим, что папка смонтирована
-    assert os.path.exists("/app/Makefile")  # например
+    assert os.path.isdir("/app")
+    assert os.path.exists("/app/Makefile")
