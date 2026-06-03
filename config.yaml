@@ -22,9 +22,40 @@
 #   - type: alignment
 #     engine: minimap2
 
+
+# pipeline_steps:
+#   - type: prepare_data
+
+#   - type: qc
+#     depends_on:
+#       - prepare_data
+
+#   - type: align
+#     depends_on:
+#       - qc
+
+# glob pattern
+# tests/data/raw/99.zip - просто файл
+# * - любое количество символов
+# ? - один символ
+# [abc] — набор символов
+# [a-z] — диапазон tests/data/raw/[0-9][0-9].zip -> tests/data/raw/01.zip - tests/data/raw/99.zip
+# tests/data/raw/[0-9][0-9]_FR_*.zip -> tests/data/raw/01_FR_filtered.zip - tests/data/raw/99_FR_non_filtered.zip
+
+
 pipeline_steps:
   - type: prepare_data
     enabled: true
     redo: false
-    input_dir: "tests/data/raw/"
+    # glob - как отдельный файл, так и паттерн
+    input_glob: "tests/data/raw/*.zip"
     output_dir: "tests/data/unpacked/"
+    threads: 2
+
+  - type: conversion_final_report_to_vcf
+    enabled: true
+    redo: false
+    # type шага, output которого используется
+    input: "prepare_data"
+    output_dir: "tests/results/vcf/"
+    threads: 1

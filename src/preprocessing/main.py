@@ -186,10 +186,6 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
 
     return None  # Возвращаем None в случае успеха
 
-    # except Exception as e:
-    #     # Возвращаем ошибку, чтобы увидеть ее в главном процессе
-    #     logger.error(f"Ошибка при обработке файла {name_file}: {e}")
-
 
 if __name__ == "__main__":
     # 1. Конфигурация ----

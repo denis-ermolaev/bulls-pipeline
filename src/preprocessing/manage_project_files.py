@@ -1,99 +1,85 @@
-import glob
 import gzip
 import logging
 import os
 import zipfile
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
 
-def process_archives(input_root, output_root):
+def process_archives(input_file, output_dir):
     """
-    Рекурсивно ищет все .zip архивы в input_root, находит в них файлы
-    *_FinalReport.txt, сжимает их в отдельные .gz и сохраняет в output_root.
+    Открывает архив input_zip, находит в нём файл
+    *_FinalReport.txt, сжимает их в отдельный .gz и сохраняет в output_file.
 
     Параметры:
-    input_root (str): Корневая папка для поиска .zip архивов (например, 'data/raw').
-    output_root (str): Папка для сохранения результатов (например, 'data/unpacked').
+    input_file (str): целевой архив (например, 'data/raw/thintergen_share_geno_VM2_1.zip').
+    output_dir (str): директория для сохранения (например, 'data/unpacked/').
+    Возвращает:
+    output_files (list[str]) - ['tests/data/unpacked/test_data_res_FinalReport.txt.gz']
+    Заканчиваются на _FinalReport.txt.gz
 
     thintergen_share_geno_VM2_1.zip -> thintergen_share_geno_VM2_1_FinalReport.txt.gz
     """
 
-    logger.info(f"Начинаю обработку архивов в {input_root}")
-    # Убедимся, что выходная директория существует
-    os.makedirs(output_root, exist_ok=True)
+    logger.info(f"Начинаю обработку архива {input_file}")
 
-    logger.info(f"Поиск .zip архивов в '{input_root}' и всех подпапках...")
+    zip_path = input_file
 
-    # Рекурсивный поиск всех .zip файлов
-    # `recursive=True` заставляет glob искать и в поддиректориях
-    zip_files_path = os.path.join(input_root, "**", "*.zip")
-    all_zip_files = glob.glob(zip_files_path, recursive=True)
+    logger.debug(f"🔍 Открываю архив: {os.path.basename(zip_path)}")
 
-    if not all_zip_files:
-        logger.error("Не найдено ни одного .zip архива.")
-        return
+    output_files = []
+    try:
+        # Открываем .zip архив в режиме чтения
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            # Получаем список всех файлов внутри архива
+            for internal_file_name in archive.namelist():
+                is_macos_system_file = internal_file_name.startswith(
+                    "__MACOSX/"
+                ) or os.path.basename(internal_file_name).startswith("._")
 
-    logger.info(f"Найдено {len(all_zip_files)} архивов. Начинаю обработку...\n")
+                if is_macos_system_file:
+                    logger.debug(f"-> Пропускаю системный файл: {internal_file_name}")
+                    continue  # Переходим к следующему файлу в архиве
 
-    # --- Шаг 2: Обработка каждого архива ---
+                # Проверяем, соответствует ли файл нашему критерию
+                if internal_file_name.endswith("_FinalReport.txt"):
+                    output_gz_path = (
+                        Path(output_dir)
+                        / f"{Path(input_file).stem}_{internal_file_name}"
+                    ).with_suffix(".txt.gz")
+                    # if os.path.exists(output_gz_path):
+                    #     logger.debug(
+                    #         f"-> 🟡 Файл уже существует, пропускаю: {output_gz_path}"
+                    #     )
+                    #     continue  # Переходим к следующему файлу
+                    logger.debug(f"-> Найден файл: {internal_file_name}. Обработка...")
+                    # Извлекаем содержимое файла в память (в виде байтов)
+                    with archive.open(internal_file_name) as file_in_zip:
+                        file_content = file_in_zip.read()
 
-    total_reports_found = 0
-    total_skipped = 0
+                    output_gz_path.parent.mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+                    # Сжимаем содержимое и записываем в новый файл
+                    with gzip.open(output_gz_path, "wb") as f_out:
+                        f_out.write(file_content)
 
-    for zip_path in all_zip_files:
-        logger.debug(f"🔍 Открываю архив: {os.path.basename(zip_path)}")
-        try:
-            # Открываем .zip архив в режиме чтения
-            with zipfile.ZipFile(zip_path, "r") as archive:
-                # Получаем список всех файлов внутри архива
-                for internal_file_name in archive.namelist():
-                    is_macos_system_file = internal_file_name.startswith(
-                        "__MACOSX/"
-                    ) or os.path.basename(internal_file_name).startswith("._")
+                    logger.debug(f"✅ Сжат и сохранен как: {output_gz_path}")
+                    output_files.append(str(output_gz_path))
 
-                    if is_macos_system_file:
-                        logger.debug(
-                            f"-> Пропускаю системный файл: {internal_file_name}"
-                        )
-                        continue  # Переходим к следующему файлу в архиве
+    except zipfile.BadZipFile:
+        logger.error(
+            f"❌ ОШИБКА: Файл '{os.path.basename(zip_path)}' поврежден или не является zip-архивом."
+        )
+    except Exception as e:
+        logger.error(f"❌ Непредвиденная ОШИБКА при обработке {zip_path}: {e}")
 
-                    # Проверяем, соответствует ли файл нашему критерию
-                    if internal_file_name.endswith("_FinalReport.txt"):
-                        total_reports_found += 1
-                        # Формируем имя и путь для нового .gz файла
-                        base_name = os.path.basename(internal_file_name)
-                        output_gz_path = os.path.join(output_root, base_name + ".gz")
-                        if os.path.exists(output_gz_path):
-                            logger.debug(
-                                f"-> 🟡 Файл уже существует, пропускаю: {output_gz_path}"
-                            )
-                            total_skipped += 1
-                            continue  # Переходим к следующему файлу
-                        logger.debug(
-                            f"-> Найден файл: {internal_file_name}. Обработка..."
-                        )
-                        # Извлекаем содержимое файла в память (в виде байтов)
-                        with archive.open(internal_file_name) as file_in_zip:
-                            file_content = file_in_zip.read()
-                        # Сжимаем содержимое и записываем в новый файл
-                        with gzip.open(output_gz_path, "wb") as f_out:
-                            f_out.write(file_content)
-
-                        logger.debug(f"✅ Сжат и сохранен как: {output_gz_path}")
-
-        except zipfile.BadZipFile:
-            logger.error(
-                f"❌ ОШИБКА: Файл '{os.path.basename(zip_path)}' поврежден или не является zip-архивом."
-            )
-        except Exception as e:
-            logger.error(f"❌ Непредвиденная ОШИБКА при обработке {zip_path}: {e}")
-
-    logger.info(
-        f"--- Обработка завершена. Всего найдено и сжато {total_reports_found} файлов FinalReport. Из них пропущено, т.к они уже были готовы {total_skipped} ---"
-    )
+    logger.info("--- Обработка завершена. ---")
+    return output_files
 
 
 if __name__ == "__main__":
@@ -107,13 +93,4 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    input_directory = os.getenv("PATH_TO_RAW")
-    output_directory = os.getenv("PATH_TO_PREPARED")
-
-    # TEST MODE
-    test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
-    if test_mode:
-        input_directory = os.getenv("PATH_TO_RAW_TEST")
-        output_directory = os.getenv("PATH_TO_PREPARED_TEST")
-
-    process_archives(input_directory, output_directory)
+    print(process_archives("tests/data/raw/test_data.zip", "tests/data/unpacked/"))
