@@ -37,7 +37,7 @@ class PrepareDataStep(BaseModel):
         return v
 
 
-class ConversionFinalReportToVcf(BaseModel):
+class ConversionFinalReportToVcfStep(BaseModel):
     type: Literal["conversion_final_report_to_vcf"]
     enabled: bool = True
     redo: bool = True
@@ -63,7 +63,7 @@ class ConversionFinalReportToVcf(BaseModel):
 class Config(BaseModel):
     pipeline_steps: list[
         Annotated[
-            Union[PrepareDataStep, ConversionFinalReportToVcf],
+            Union[PrepareDataStep, ConversionFinalReportToVcfStep],
             Field(discriminator="type"),
         ]
     ]

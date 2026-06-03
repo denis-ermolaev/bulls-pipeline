@@ -58,4 +58,4 @@ pipeline_steps:
     # type шага, output которого используется
     input: "prepare_data"
     output_dir: "tests/results/vcf/"
-    threads: 1
+    threads: 2

@@ -4,28 +4,27 @@ from pathlib import Path
 
 import pandas as pd
 import pysam
-import tools_genome
 from dotenv import load_dotenv
-from manage_project_files import process_archives
-from tools_bash import CMD
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
-tqdm.pandas()  # подключить поддержку progress_apply
+import src.preprocessing.tools_genome as tools_genome
+
+tqdm.pandas(disable=True)  # подключить поддержку progress_apply
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 
-def create_vcf_for_sample(sample_id, sample_df, name_file):
+
+def create_vcf_for_sample(sample_id, sample_df, name_file, path_to_result):
     """
     Создает VCF файл для одного образца(организма) на основе его данных в DataFrame.
     """
-    filepath = f"{os.getenv('PATH_VCF_SEP')}/{name_file}/{sample_id}.vcf"
-    output_path = Path(f"{os.getenv('PATH_VCF_SEP')}/{name_file}")
-
-    test_mode = test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
-    if test_mode:
-        filepath = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}/{sample_id}.vcf"
-        output_path = Path(f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}")
+    filepath = f"{path_to_result}/{name_file}/{sample_id}.vcf"
+    output_path = Path(f"{path_to_result}/{name_file}")
+    # test_mode = test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
+    # if test_mode:
+    #     filepath = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}/{sample_id}.vcf"
+    #     output_path = Path(f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}")
 
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -108,6 +107,8 @@ def create_vcf_for_sample(sample_id, sample_df, name_file):
 
     vcf_out.close()
 
+    return filepath
+
 
 def create_column_REF(row):
     if row.Chr == "0" or row.Position == 0:
@@ -143,29 +144,38 @@ def create_column_ALT(row):
         return "DATA_ERROR"
 
 
-def process_file(name_file, path_to_data, bovinehd_manifest_df):
+def process_file(file_path, path_to_result):
     """
     Обработка одного файла
     """
     # try:
-    file_name = f"{os.getenv('PATH_VCF_SEP')}/{name_file}"
+    # file_name = f"{os.getenv('PATH_VCF_SEP')}/{name_file}"
 
-    test_mode = test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
-    if test_mode:
-        file_name = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}"
+    # test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
+    # if test_mode:
+    #     file_name = f"{os.getenv('PATH_VCF_SEP_TEST')}/{name_file}"
+    logger.debug(f"[process_file]: {file_path}, {path_to_result}")
+    bovinehd_manifest_df = pd.read_csv(  # pyright: ignore[reportCallIssue]
+        os.getenv("MANIFEST_PATH"),
+        sep=",",
+        header=7,
+        skipfooter=24,
+        usecols=["Name", "IlmnStrand", "SNP", "RefStrand"],
+        engine="python",
+    )
 
-    if Path(file_name).exists():
-        return None
+    # if Path(file_path).exists():
+    #     return None
 
     # pyarrow с 1 минуты 25 секунд до 25 секунд
     df = pd.read_csv(
-        os.path.join(path_to_data, name_file),
+        file_path,
         sep="\t",
         header=9,
         compression="gzip",
         engine="pyarrow",
     )
-    logger.info(f"Запуск для файла {name_file}")
+    logger.info(f"Запуск для файла {Path(file_path).stem}")
 
     rdf = pd.merge(df, bovinehd_manifest_df, left_on="SNP Name", right_on="Name")
     rdf.drop(columns=["Name"], inplace=True)
@@ -181,10 +191,18 @@ def process_file(name_file, path_to_data, bovinehd_manifest_df):
     grouped_by_sample = rdf.groupby("Sample_ID")
 
     logger.info("Создание .vcf файла")
-    for sample_id, sample_data in tqdm(grouped_by_sample, total=len(grouped_by_sample)):
-        create_vcf_for_sample(sample_id, sample_data, name_file)
+    output_files = []
 
-    return None  # Возвращаем None в случае успеха
+    for sample_id, sample_data in tqdm(
+        grouped_by_sample, total=len(grouped_by_sample), disable=True
+    ):
+        output_files.append(
+            create_vcf_for_sample(
+                sample_id, sample_data, Path(file_path).name, path_to_result
+            )
+        )
+
+    return output_files
 
 
 if __name__ == "__main__":
@@ -196,26 +214,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-
-    logger.info("Подготовка файлов...")
-    input_directory = os.getenv("PATH_TO_RAW")
-    output_directory = os.getenv("PATH_TO_PREPARED")
-    path_to_data = os.getenv("PATH_TO_PREPARED")
-
-    test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
-    if test_mode:
-        input_directory = os.getenv("PATH_TO_RAW_TEST")
-        output_directory = os.getenv("PATH_TO_PREPARED_TEST")
-        path_to_data = os.getenv("PATH_TO_PREPARED_TEST")
-
-    process_archives(input_directory, output_directory)
-
-    all_data = os.listdir(path_to_data)
-    # [4:5] - самый маленький файл
-    # all_data = [all_data[-2]]
-    # all_data = all_data[4:5]
-
-    logger.info("Загрузка общего файла манифеста...")
+    logger.debug("Загрузка файла манифеста")
     bovinehd_manifest_df = pd.read_csv(  # pyright: ignore[reportCallIssue]
         os.getenv("MANIFEST_PATH"),
         sep=",",
@@ -225,13 +224,50 @@ if __name__ == "__main__":
         engine="python",
     )
 
-    logger.debug(all_data)
-    logger.info("Конвертация...")
-    for file in tqdm(all_data, total=len(all_data)):
-        process_file(file, path_to_data, bovinehd_manifest_df)
+    logger.debug("Загрузка завершена. Начинаем обработку файла")
 
-    # Сжатие, индексирование, объединение, создания формата для plink
-    cmd = CMD()
-    cmd.prepare_vcf_files()
-    cmd.merge_vcf()
-    cmd.convert_to_plink()
+    print(
+        process_file(
+            "tests/data/unpacked/test_data_test_data_res_FinalReport.txt.gz",
+            "tests/results",
+        )
+    )
+
+    # logger.info("Подготовка файлов...")
+    # input_directory = os.getenv("PATH_TO_RAW")
+    # output_directory = os.getenv("PATH_TO_PREPARED")
+    # path_to_data = os.getenv("PATH_TO_PREPARED")
+
+    # test_mode = True if os.getenv("TEST_MODE", "False") == "True" else False
+    # if test_mode:
+    #     input_directory = os.getenv("PATH_TO_RAW_TEST")
+    #     output_directory = os.getenv("PATH_TO_PREPARED_TEST")
+    #     path_to_data = os.getenv("PATH_TO_PREPARED_TEST")
+
+    # process_archives(input_directory, output_directory)
+
+    # all_data = os.listdir(path_to_data)
+    # # [4:5] - самый маленький файл
+    # # all_data = [all_data[-2]]
+    # # all_data = all_data[4:5]
+
+    # logger.info("Загрузка общего файла манифеста...")
+    # bovinehd_manifest_df = pd.read_csv(  # pyright: ignore[reportCallIssue]
+    #     os.getenv("MANIFEST_PATH"),
+    #     sep=",",
+    #     header=7,
+    #     skipfooter=24,
+    #     usecols=["Name", "IlmnStrand", "SNP", "RefStrand"],
+    #     engine="python",
+    # )
+
+    # logger.debug(all_data)
+    # logger.info("Конвертация...")
+    # for file in tqdm(all_data, total=len(all_data)):
+    #     process_file(file, path_to_data, bovinehd_manifest_df)
+
+    # # Сжатие, индексирование, объединение, создания формата для plink
+    # cmd = CMD()
+    # cmd.prepare_vcf_files()
+    # cmd.merge_vcf()
+    # cmd.convert_to_plink()

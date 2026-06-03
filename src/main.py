@@ -5,103 +5,156 @@ from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
+from tqdm import tqdm
+
 from src.config.config import config
-from src.config.schema import PrepareDataStep
+from src.config.schema import ConversionFinalReportToVcfStep, PrepareDataStep
+from src.preprocessing.main import process_file
 from src.preprocessing.manage_project_files import process_archives
 from src.utils.fingerprint import fingerprint
 
 STEP_HANDLERS = {}
 
 
-def register(name):
+def register(name, worker):
     def wrapper(fn):
-        STEP_HANDLERS[name] = fn
+        STEP_HANDLERS[name] = (fn, worker)
         return fn
 
     return wrapper
 
 
-# 1. Подготовка данных ----
-def _prepare_data(input_zip, step: PrepareDataStep):
-    """
-    Обработка одного архива
-    """
-    cash_file = Path(f".cache/{step.type}/{Path(input_zip).stem}")
-    hash = None
-    output_files = []
-    if cash_file.exists():
-        try:
-            cache = json.loads(cash_file.read_text())  # json.decoder.JSONDecodeError:
-            hash = cache["hash"]
-            output_files = cache[input_zip]
-        except json.decoder.JSONDecodeError:
-            pass
-        except KeyError:  # Если нужных ключей нету, значит конфига нету
-            pass
-    else:
-        cash_file.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+def fingerprint_handler(func):
+    def wrapper(file_path, step, **kwargs):
+        cash_file = Path(f".cache/{step.type}/{Path(file_path).stem}")
+        hash = None
+        output_files = []
+        if cash_file.exists():
+            try:
+                cache = json.loads(
+                    cash_file.read_text()
+                )  # json.decoder.JSONDecodeError:
+                hash = cache["hash"]
+                output_files = cache[file_path]
+            except json.decoder.JSONDecodeError:
+                pass
+            except KeyError:  # Если нужных ключей нету, значит конфига нету
+                pass
+        else:
+            cash_file.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
 
-    if not step.enabled and hash == fingerprint(
-        PrepareDataStep, [input_zip], output_files
-    ):
-        logging.debug(
-            f"[{step.type}-{Path(input_zip).stem}]. SKIP (fingerprint match OR deactive)"
-        )
+        if not step.enabled and hash == fingerprint(
+            PrepareDataStep, [file_path], output_files
+        ):
+            logging.debug(
+                f"[{step.type}-{Path(file_path).stem}]. SKIP (fingerprint match OR deactive)"
+            )
+            return output_files
+
+        if step.redo or hash != fingerprint(PrepareDataStep, [file_path], output_files):
+            logging.debug(f"[{step.type}-{Path(file_path).stem}]. Запуск обработки")
+
+            output_files = func(
+                file_path, **kwargs
+            )  # process_archives(file_path, step.output_dir)
+
+            hash = fingerprint(PrepareDataStep, [file_path], output_files)
+
+            logging.debug(f"[{step.type}-{Path(file_path).stem}]. Новый хэш {hash}")
+            cash_file.write_text(json.dumps({"hash": hash, file_path: output_files}))
+        else:
+            logging.debug(
+                f"[{step.type}-{Path(file_path).stem}]. SKIP (files already done)"
+            )
+
         return output_files
 
-    if step.redo or hash != fingerprint(PrepareDataStep, [input_zip], output_files):
-        logging.debug(f"[{step.type}-{Path(input_zip).stem}]. Запуск обработки")
+    return wrapper
 
-        output_files = process_archives(input_zip, step.output_dir)
 
-        hash = fingerprint(PrepareDataStep, [input_zip], output_files)
+def steps_decorator(func):
+    def wrapper(step, worker):
+        if not step.output_dir.exists():
+            step.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logging.debug(f"[{step.type}-{Path(input_zip).stem}]. Новый хэш {hash}")
-        cash_file.write_text(json.dumps({"hash": hash, input_zip: output_files}))
-    else:
-        logging.debug(
-            f"[{step.type}-{Path(input_zip).stem}]. SKIP (files already done)"
+        file_pool, desc = func(step)
+        logging.debug(f"[{step.type}]. Пул файлов для обработки {file_pool}")
+        output_files_clean = []
+
+        with Pool(step.threads) as p:
+            for result in tqdm(
+                p.imap_unordered(
+                    partial(
+                        worker,
+                        step=step,
+                    ),
+                    file_pool,
+                ),
+                total=len(file_pool),
+                desc=desc,
+            ):
+                output_files_clean.extend(result)
+
+        Path(f".cache/{step.type}/_all.json").write_text(
+            json.dumps(
+                {
+                    "input": file_pool,
+                    "output": output_files_clean,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
         )
 
-    return output_files
+    return wrapper
 
 
-@register("prepare_data")
+# 1. Подготовка данных ----
+def _prepare_data(file_path, step):
+    process_archives_decorate = fingerprint_handler(process_archives)
+    return process_archives_decorate(
+        file_path=file_path,
+        step=step,
+        output_dir=step.output_dir,
+    )
+
+
+@register("prepare_data", _prepare_data)
+@steps_decorator
 def prepare_data(step: PrepareDataStep):
     """
     Подготовка данных с помощью многопоточности
     """
-    if not step.output_dir.exists():
-        step.output_dir.mkdir(parents=True, exist_ok=True)
-
     file_pool = sorted(list(glob.glob(step.input_glob)))
-    logging.debug(f"[{step.type}]. Пул файлов для обработки {file_pool}")
+    # (file_pool, desc)
+    return file_pool, "Подготовка исходных данных"
 
-    with Pool(step.threads) as p:
-        output_files = p.map(partial(_prepare_data, step=step), file_pool)
 
-    output_files_clean = []
-    for files in output_files:
-        output_files_clean.extend(files)
-    for file in glob.glob(f"{step.output_dir}/*"):
-        if file not in output_files_clean:
-            logging.warning(
-                f"[{step.type}]. Файл, не входит в результаты обработки: {file}"
-            )
-
-    Path(f".cache/{step.type}/_all.json").write_text(
-        json.dumps(
-            {
-                "input": file_pool,
-                "output": output_files_clean,
-            },
-            indent=2,
-            ensure_ascii=False,
-        )
+# 2. Конвертация в VCF ----
+def _conversion_final_report_to_vcf(
+    file_path,
+    step: ConversionFinalReportToVcfStep,
+):
+    process_file_decorate = fingerprint_handler(process_file)
+    return process_file_decorate(
+        file_path=file_path,
+        step=step,
+        path_to_result=step.output_dir,
     )
+
+
+@register("conversion_final_report_to_vcf", _conversion_final_report_to_vcf)
+@steps_decorator
+def conversion_final_report_to_vcf(step: ConversionFinalReportToVcfStep):
+    """
+    Подготовка данных с помощью многопоточности
+    """
+
+    file_pool = sorted(step.input)
+    return file_pool, "Конвертация в VCF"
 
 
 if __name__ == "__main__":
@@ -113,11 +166,15 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    logging.getLogger("src.preprocessing.main").disabled = True
+    logging.getLogger("src.preprocessing.manage_project_files").disabled = True
 
     for step in config.pipeline_steps:
         logging.debug(f"Начало шага {step.type}. Настройки {step}")
         if STEP_HANDLERS.get(step.type):
             handler = STEP_HANDLERS[step.type]
-            handler(step)
+            # handler[0] - основная многопоточная ф-я
+            # handler[1] - однопоточная ф-я
+            handler[0](step, handler[1])
         else:
             logging.error(f"Ф-и обработчика для {step.type} не существует")
