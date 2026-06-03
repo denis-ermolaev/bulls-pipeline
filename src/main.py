@@ -8,7 +8,11 @@ from pathlib import Path
 from tqdm import tqdm
 
 from src.config.config import config
-from src.config.schema import ConversionFinalReportToVcfStep, PrepareDataStep
+from src.config.schema import (
+    ConversionFinalReportToVcfStep,
+    PrepareDataStep,
+    StepsFunctionReturn,
+)
 from src.preprocessing.main import process_file
 from src.preprocessing.manage_project_files import process_archives
 from src.utils.fingerprint import fingerprint
@@ -80,8 +84,8 @@ def steps_decorator(func):
         if not step.output_dir.exists():
             step.output_dir.mkdir(parents=True, exist_ok=True)
 
-        file_pool, desc = func(step)
-        logging.debug(f"[{step.type}]. Пул файлов для обработки {file_pool}")
+        data: StepsFunctionReturn = func(step)
+        logging.debug(f"[{step.type}]. Пул файлов для обработки {data.file_pool}")
         output_files_clean = []
 
         with Pool(step.threads) as p:
@@ -91,17 +95,17 @@ def steps_decorator(func):
                         worker,
                         step=step,
                     ),
-                    file_pool,
+                    data.file_pool,
                 ),
-                total=len(file_pool),
-                desc=desc,
+                total=len(data.file_pool),
+                desc=data.desc,
             ):
                 output_files_clean.extend(result)
 
         Path(f".cache/{step.type}/_all.json").write_text(
             json.dumps(
                 {
-                    "input": file_pool,
+                    "input": data.file_pool,
                     "output": output_files_clean,
                 },
                 indent=2,
@@ -124,13 +128,19 @@ def _prepare_data(file_path, step):
 
 @register("prepare_data", _prepare_data)
 @steps_decorator
-def prepare_data(step: PrepareDataStep):
+def prepare_data(step: PrepareDataStep) -> StepsFunctionReturn:
     """
     Подготовка данных с помощью многопоточности
     """
     file_pool = sorted(list(glob.glob(step.input_glob)))
     # (file_pool, desc)
-    return file_pool, "Подготовка исходных данных"
+
+    return StepsFunctionReturn(
+        **{
+            "file_pool": file_pool,
+            "desc": "Подготовка исходных данных",
+        }
+    )
 
 
 # 2. Конвертация в VCF ----
@@ -148,13 +158,20 @@ def _conversion_final_report_to_vcf(
 
 @register("conversion_final_report_to_vcf", _conversion_final_report_to_vcf)
 @steps_decorator
-def conversion_final_report_to_vcf(step: ConversionFinalReportToVcfStep):
+def conversion_final_report_to_vcf(
+    step: ConversionFinalReportToVcfStep,
+) -> StepsFunctionReturn:
     """
     Подготовка данных с помощью многопоточности
     """
 
     file_pool = sorted(step.input)
-    return file_pool, "Конвертация в VCF"
+    return StepsFunctionReturn(
+        **{
+            "file_pool": file_pool,
+            "desc": "Конвертация в VCF",
+        }
+    )
 
 
 if __name__ == "__main__":
@@ -172,9 +189,9 @@ if __name__ == "__main__":
     for step in config.pipeline_steps:
         logging.debug(f"Начало шага {step.type}. Настройки {step}")
         if STEP_HANDLERS.get(step.type):
-            handler = STEP_HANDLERS[step.type]
-            # handler[0] - основная многопоточная ф-я
-            # handler[1] - однопоточная ф-я
-            handler[0](step, handler[1])
+            # handler - многопоточная ф-я обработчик, использующая handler_worker
+            # handler_worker - однопоточная ф-я обработчик
+            handler, handler_worker = STEP_HANDLERS[step.type]
+            handler(step, handler_worker)
         else:
             logging.error(f"Ф-и обработчика для {step.type} не существует")

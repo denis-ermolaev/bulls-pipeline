@@ -7,6 +7,9 @@ FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"
 
 # .PHONY: build run stop enter logs stats clean help install run_pipeline prepare_files tools_bash tools_ensembl
 
+project_preparation:
+	@export PATH="$$HOME/.local/bin:$$PATH" && bash tests/preparation_data/project_preparation.sh
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 #                            УПРАВЛЕНИЕ КОНТЕЙНЕРОМ                            #

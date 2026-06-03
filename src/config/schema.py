@@ -67,3 +67,8 @@ class Config(BaseModel):
             Field(discriminator="type"),
         ]
     ]
+
+
+class StepsFunctionReturn(BaseModel):
+    file_pool: list[str]
+    desc: str

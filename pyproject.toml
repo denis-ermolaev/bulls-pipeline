@@ -19,10 +19,11 @@ dependencies = [
     "lxml>=6.1.1", # Чтение таблиц из html
     "html5lib>=1.1", # Чтение таблиц из html
     "mygene>=3.2.2", # Доступ к базам данных
-    "pydantic>=2.13.4",
+    "pydantic>=2.13.4", # Валидация конфигов и прочего
 ]
 [dependency-groups]
 dev = [
+    "huggingface-hub>=1.17.0", # Загружать публичные данные
     "jupyter>=1.1.1",
     "pre-commit>=4.6.0",
     "pre-commit-hooks>=6.0.0",
