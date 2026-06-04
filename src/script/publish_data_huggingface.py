@@ -2,6 +2,8 @@
 """
 upload_to_huggingface.py
 Загружает папки и/или отдельные файлы на Hugging Face Hub.
+
+hf auth login - для API key
 """
 
 import os
@@ -24,6 +26,7 @@ LOCAL_PATHS = [
     "data/goa_cow.gaf.gz",
     "data/Nellore_cattle_gwas_product.txt",
     "data/qtldat545053924.csv",
+    "data/bulls-pipeline.tar",
 ]
 REPO_TYPE = "dataset"
 IGNORE_PATTERNS = ["*.tmp", "*.log", "__pycache__", "*.pyc"]

@@ -6,24 +6,26 @@ download_selective.py
 """
 
 from pathlib import Path
-from huggingface_hub import snapshot_download, hf_hub_download
+
+from huggingface_hub import hf_hub_download, snapshot_download
 
 REPO_ID = "denis-ermolaev/bulls-data"
 REPO_TYPE = "dataset"
-LOCAL_DIR = "."            # корень, куда сохранять (можно "./test_data")
-TOKEN = None               # для приватных репозиториев указать токен
+LOCAL_DIR = "."  # корень, куда сохранять (можно "./test_data")
+TOKEN = None  # для приватных репозиториев указать токен
 RESUME = True
 
 # Перечисли нужные папки или файлы (пути относительно корня репозитория).
 # Для папок используй "/**" в конце (рекурсивно). Файлы – как есть.
 # Примеры:
 SELECTED_PATHS = [
-    "bin/**",                                          # вся папка bin
-    "data/genetic_maps/**",                            # рекурсивно папку genetic_maps
+    "bin/**",  # вся папка bin
+    "data/genetic_maps/**",  # рекурсивно папку genetic_maps
     "data/manifest/BovineHD_B1.csv",
     "data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna",
     "data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna.fai",
-    "data/ref_panel/Chr24_phased_snp.vcf.gz"
+    "data/ref_panel/Chr24_phased_snp.vcf.gz",
+    "data/bulls-pipeline.tar",
 ]
 # Если нужно загрузить всю папку data рекурсивно: "data/**"
 
@@ -58,7 +60,7 @@ def download_selected(paths: list[str]):
                 selected_files.append(p)
             else:
                 selected_allow.append(f"{p}/**")
-                # также попробуем скачать как файл на всякий случай? 
+                # также попробуем скачать как файл на всякий случай?
                 # Если это действительно файл без расширения – тогда нужно уточнить.
                 # Для универсальности можно сначала попробовать hf_hub_download для файла,
                 # если ошибка – пропустить, но тогда потеряем папку.
@@ -74,7 +76,7 @@ def download_selected(paths: list[str]):
             repo_type=REPO_TYPE,
             local_dir=LOCAL_DIR,
             allow_patterns=selected_allow,
-            ignore_patterns=None,       # можно добавить исключения, если нужно
+            ignore_patterns=None,  # можно добавить исключения, если нужно
             resume_download=RESUME,
             token=TOKEN,
         )

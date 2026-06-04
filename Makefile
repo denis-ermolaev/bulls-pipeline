@@ -8,9 +8,10 @@ FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"
 # .PHONY: build run stop enter logs stats clean help install run_pipeline prepare_files tools_bash tools_ensembl
 
 test_project_preparation:
-	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/test_project_preparation.sh
+	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh src/script/test_download_data_huggingface.py
+
 project_preparation:
-	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh
+	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh src/script/download_data_huggingface.py
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
@@ -115,5 +116,16 @@ test: build
 
 requirements_host:
 	uv export --format requirements-txt > requirements.txt
+
+# ---------------------------------------------------------------------------- #
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+#                          Подготовка публичных данных                         #
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+save_container:
+	rm -f data/bulls-pipeline.tar
+	podman save -o data/$(IMAGE_NAME).tar $(IMAGE_NAME):latest
 
 # ---------------------------------------------------------------------------- #
