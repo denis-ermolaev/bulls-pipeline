@@ -4,6 +4,7 @@ bin/**
 data/**
 results/**
 tests/results/**
+tests/data/unpacked/**
 notebooks/archive/**
 **/**/__pycache__
 .*_cache

@@ -27,14 +27,12 @@ uv sync
 echo "Dependencies synced ✔"
 
 echo "==> Running data download script..."
-DOWNLOAD_SCRIPT="tests/preparation_data/download_data_huggingface.py"
+DOWNLOAD_SCRIPT="src/script/test_download_data_huggingface.py"
 
 if [ -f "$DOWNLOAD_SCRIPT" ]; then
     uv run python "$DOWNLOAD_SCRIPT"
-elif [ -f "scripts/download_data.sh" ]; then
-    bash scripts/download_data.sh
 else
-    echo "❌ Neither $DOWNLOAD_SCRIPT nor scripts/download_data.sh found!"
+    echo "❌ $DOWNLOAD_SCRIPT not found!"
     exit 1
 fi
 

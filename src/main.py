@@ -174,18 +174,30 @@ def conversion_final_report_to_vcf(
     )
 
 
-if __name__ == "__main__":
-    if not Path(".cache").exists():
-        Path(".cache").mkdir()
+# Создаём свой handler, который будет печатать логи
+class TqdmLoggingHandler(logging.Handler):
+    def emit(self, record):
+        msg = self.format(record)
+        from tqdm import tqdm
 
-    logging.basicConfig(
-        level="DEBUG",
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
+        tqdm.write(msg)
+
+
+if __name__ == "__main__":
+    log = logging.getLogger()
+    log.setLevel(logging.DEBUG)
+    handler = TqdmLoggingHandler()
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%H:%M:%S"
+        )
     )
+    log.addHandler(handler)
     logging.getLogger("src.preprocessing.main").disabled = True
     logging.getLogger("src.preprocessing.manage_project_files").disabled = True
 
+    if not Path(".cache").exists():
+        Path(".cache").mkdir()
     for step in config.pipeline_steps:
         logging.debug(f"Начало шага {step.type}. Настройки {step}")
         if STEP_HANDLERS.get(step.type):

@@ -2,7 +2,12 @@
 Для автоматической подготовки окружения используется команда:
 
 ```bash
+# Для тестового окружения
+make test_project_preparation
+
+# Скачивает все данные (Около 30гб)
 make project_preparation
+
 ```
 - Устанавливает uv (менеджер пакетов), если ещё не установлен
 - Устанавливает Python нужной версии, если ещё нет
@@ -38,5 +43,6 @@ make project_preparation
 
 ## Информация
 
-Репозиторий с публичными данным, откуда загружаются данные при подготовки проекта:
-- `https://huggingface.co/datasets/denis-ermolaev/bulls-data`
+
+- `https://huggingface.co/datasets/denis-ermolaev/bulls-data` - Репозиторий с публичными данным, откуда они загружаются при подготовки окружения проекта.
+- `https://drive.google.com/file/d/1rs2w0yF5wqHGpT5uz7ovqB6i-O9B8u9b/view?usp=sharing` - Диплом, написанный по проекту.

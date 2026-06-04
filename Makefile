@@ -7,8 +7,10 @@ FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"
 
 # .PHONY: build run stop enter logs stats clean help install run_pipeline prepare_files tools_bash tools_ensembl
 
+test_project_preparation:
+	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/test_project_preparation.sh
 project_preparation:
-	@export PATH="$$HOME/.local/bin:$$PATH" && bash tests/preparation_data/project_preparation.sh
+	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
@@ -69,20 +71,20 @@ install:
 	podman exec $(CONTAINER_NAME) uv sync --no-install-project
 
 
-run_pipeline: install
-	podman exec $(CONTAINER_NAME) python src/preprocessing/main.py
+run_pipeline:
+	podman exec $(CONTAINER_NAME) uv run -m src.main
 
 
-run_prepare_files: install
-	podman exec $(CONTAINER_NAME) python src/preprocessing/manage_project_files.py
+# run_prepare_files: install
+# 	podman exec $(CONTAINER_NAME) python src/preprocessing/manage_project_files.py
 
 
-run_tools_bash: install
-	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_bash.py
+# run_tools_bash: install
+# 	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_bash.py
 
 
-run_tools_ensembl: install
-	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_ensembl.py
+# run_tools_ensembl: install
+# 	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_ensembl.py
 
 # ---------------------------------------------------------------------------- #
 
