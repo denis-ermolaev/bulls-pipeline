@@ -2,14 +2,17 @@ IMAGE_NAME = bulls-pipeline
 CONTAINER_NAME = bulls-pipeline
 
 # Автоматическая проверка: если мы на сервере (есть папка /scratch), добавляем флаг групп.
-# Если запускаем дома — флаг будет пустым.
 FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"; fi)
 
-# .PHONY: build run stop enter logs stats clean help install run_pipeline prepare_files tools_bash tools_ensembl
+.PHONY: run_container run_jupyter stop enter run_pipeline
 
+
+### Подготовка окружения
+## Подготовить тестовое окружение
 test_project_preparation:
 	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh src/script/test_download_data_huggingface.py
 
+## Подготовить окружение
 project_preparation:
 	@export PATH="$$HOME/.local/bin:$$PATH" && bash src/script/project_preparation.sh src/script/download_data_huggingface.py
 
@@ -18,10 +21,13 @@ project_preparation:
 #                            УПРАВЛЕНИЕ КОНТЕЙНЕРОМ                            #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
+### Управление контейниризацией
+## Собрать образ
 build:
 	podman build -t $(IMAGE_NAME) .
 
-run: stop
+## Запустить контейнер
+run_container: stop
 	podman run -d \
 		--name $(CONTAINER_NAME) \
 		$(FLAGS) \
@@ -29,6 +35,7 @@ run: stop
 		-it \
 		$(IMAGE_NAME)
 
+## Запустить Jupyter сервер внутри контейнера
 run_jupyter:
 	podman run --rm -it \
 		-p 127.0.0.1:8888:8888 \
@@ -43,22 +50,27 @@ run_jupyter:
 			--ServerApp.token='' \
 			--ServerApp.password=''
 
+## Остановить контейнер
 stop:
 	podman rm -f $(CONTAINER_NAME) 2>/dev/null || true
 
+## Открыть shell в работающем контейнере
 enter:
 	podman exec -it $(CONTAINER_NAME) /bin/bash
 
+## Показать логи контейнера
 logs:
 	podman logs -f $(CONTAINER_NAME)
 
+## Проверить, работает ли контейнер
 status:
 	podman ps --filter "name=$(CONTAINER_NAME)"
 
-# Ресурсы, которые использует контейнер
+## Потребление ресурсов контейнером
 stats:
 	podman stats $(CONTAINER_NAME)
 
+## Удалить неиспользуемые образы
 clean:
 	podman image prune -f
 
@@ -68,10 +80,13 @@ clean:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 #                           КОМАНДЫ ВНУТРИ КОНТЕЙНЕРА                          #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+### Команды внутри контейнера
+## Синхронизировать зависимости (uv) в контейнере
 install:
 	podman exec $(CONTAINER_NAME) uv sync --no-install-project
 
 
+## Запустить пайплайн
 run_pipeline:
 	podman exec $(CONTAINER_NAME) uv run -m src.main
 
@@ -93,19 +108,20 @@ run_pipeline:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 #                                      DEV                                     #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-
+### Разработка(HOST)
+## Установить/обновить зависимости на хосте
 install_host:
 	uv sync
 
-# Ручной запуск линтеров и форматирования (флаг -t нужен для красивых цветов в консоли)
+## Запустить pre-commit
 pre-commit_host:
 	uv run pre-commit run --all-files
 
-# Установка хуков (внутри контейнера обновит папку .git/hooks)
+## Установить pre-commit хуки
 pre-commit-install_host:
 	uv run pre-commit install
 
-# Запуск тестов
+## Запуск тестов
 test: build
 	podman run --rm \
 		$(FLAGS) \
@@ -114,6 +130,7 @@ test: build
 		$(IMAGE_NAME) \
 		pytest
 
+## Экспортировать список зависимостей
 requirements_host:
 	uv export --format requirements-txt > requirements.txt
 
@@ -121,10 +138,14 @@ requirements_host:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-#                          Подготовка публичных данных                         #
+#                Работа с публичным репозиторием больших файлов                #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+### Публикация
+# Подготовка и загрузка ПУБЛИЧНЫХ файлов на hugging face
 
-save_container:
+
+## Сохранить образ в архив
+publish_save_container:
 	rm -f data/bulls-pipeline.tar
 	podman save -o data/$(IMAGE_NAME).tar $(IMAGE_NAME):latest
 

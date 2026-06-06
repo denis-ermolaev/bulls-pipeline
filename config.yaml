@@ -1,39 +1,3 @@
-# pipeline:
-#   steps:
-#     - name: trim
-#       enabled: true
-#       tool: fastp
-#       params:
-#         quality: 20
-
-#     - name: align
-#       enabled: true
-#       tool: bwa
-#       params:
-#         threads: 8
-
-#     - name: variant_call
-#       enabled: false
-
-# config-driven execution / declarative pipeline
-# steps:
-#   - type: alignment
-#     engine: bwa
-#   - type: alignment
-#     engine: minimap2
-
-
-# pipeline_steps:
-#   - type: prepare_data
-
-#   - type: qc
-#     depends_on:
-#       - prepare_data
-
-#   - type: align
-#     depends_on:
-#       - qc
-
 # glob pattern
 # tests/data/raw/99.zip - просто файл
 # * - любое количество символов
@@ -43,19 +7,47 @@
 # tests/data/raw/[0-9][0-9]_FR_*.zip -> tests/data/raw/01_FR_filtered.zip - tests/data/raw/99_FR_non_filtered.zip
 
 
-pipeline_steps:
-  - type: prepare_data
-    enabled: true
-    redo: false
-    # glob - как отдельный файл, так и паттерн
-    input_glob: "tests/data/raw/*.zip"
-    output_dir: "tests/data/unpacked/"
-    threads: 2
+# name: название шага
+# engine: движок, который производит шаг
+# enabled: - включён
+# redo: - переделывать ли при изменении хэша? Или переделать прямо сейчас
+# input: (поддерживает glob) / (зависимость от output другого шага)
+# output_dir:
+# params: - валидируются для каждого engine
+#   threads: 8
 
-  - type: conversion_final_report_to_vcf
+# Архитектура:
+# engine - это какой-то отдельный модуль python, который делает какую-то работу
+# ему на вход подаются входные данные, из него получаются выходные данные
+# а также параметры запуска (params), он через декораторы заключён в логику
+# фингерпринт(хешы), которые отслеживают изменились ли данные, стоит ли переделать шаг и запустить engine вновь
+# Также сохраняются для каждого шага входные файлы и выходные.
+
+# input - можно делать списком, если engine требует на вход несколько входных данных
+# input:
+#   ref: "prepare_data"
+#   target: "tests/data/raw/target_panel_[0-9][0-9].vcf"
+#   map: "tests/data/raw/recombination_map_[0-9][0-9].vcf"
+# Сапостовление - называть файлы с ведущими нулями (chunk_01, chunk_02, ..., chunk_10).
+
+# (inputs: dict[str, list[Path]], output_dir: Path, params: ParamsModel) -> list[Path]
+
+pipeline_steps:
+  - name: prepare_data
+    engine: manage_project_files
     enabled: true
     redo: false
-    # type шага, output которого используется
-    input_depends_on: "prepare_data"
-    output_dir: "tests/results/vcf/"
-    threads: 2
+    input:
+      main: "tests/data/raw/*.zip"
+    output_dir: "tests/data/unpacked/"
+    params:
+      threads: 2
+  - name: conversion_final_report_to_vcf
+    engine: vcf-converter
+    enabled: true
+    redo: false
+    input:
+      main: "prepare_data"
+    output_dir: "tests/results/vcf"
+    params:
+      threads: 2

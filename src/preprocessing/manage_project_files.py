@@ -9,13 +9,15 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 
-def process_archives(input_file, output_dir):
+def process_archives(
+    input: dict[str, list[str]], output_dir: str
+) -> dict[str, str | list[str]]:
     """
     Открывает архив input_zip, находит в нём файл
     *_FinalReport.txt, сжимает их в отдельный .gz и сохраняет в output_file.
 
     Параметры:
-    input_file (str): целевой архив (например, 'data/raw/thintergen_share_geno_VM2_1.zip').
+    input (dict): целевой архив (например, 'data/raw/thintergen_share_geno_VM2_1.zip').
     output_dir (str): директория для сохранения (например, 'data/unpacked/').
     Возвращает:
     output_files (list[str]) - ['tests/data/unpacked/test_data_res_FinalReport.txt.gz']
@@ -23,7 +25,7 @@ def process_archives(input_file, output_dir):
 
     thintergen_share_geno_VM2_1.zip -> thintergen_share_geno_VM2_1_FinalReport.txt.gz
     """
-
+    input_file = input["main"][0]  # Берём первый, движок подразумевает 1 файл
     logger.info(f"Начинаю обработку архива {input_file}")
 
     zip_path = input_file
@@ -79,7 +81,7 @@ def process_archives(input_file, output_dir):
         logger.error(f"❌ Непредвиденная ОШИБКА при обработке {zip_path}: {e}")
 
     logger.info("--- Обработка завершена. ---")
-    return output_files
+    return {"main": output_files}
 
 
 if __name__ == "__main__":

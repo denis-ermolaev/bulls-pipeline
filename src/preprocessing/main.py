@@ -15,7 +15,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-def create_vcf_for_sample(sample_id, sample_df, name_file, path_to_result):
+def create_vcf_for_sample(sample_id, sample_df, name_file, path_to_result) -> str:
     """
     Создает VCF файл для одного образца(организма) на основе его данных в DataFrame.
     """
@@ -144,10 +144,15 @@ def create_column_ALT(row):
         return "DATA_ERROR"
 
 
-def process_file(file_path, path_to_result):
+def process_file(
+    input: dict[str, list[str]], output_dir: str
+) -> dict[str, str | list[str]]:
     """
     Обработка одного файла
     """
+    file_path = input["main"][0]
+    path_to_result = output_dir
+    # file_path, path_to_result
     # try:
     # file_name = f"{os.getenv('PATH_VCF_SEP')}/{name_file}"
 
@@ -202,7 +207,7 @@ def process_file(file_path, path_to_result):
             )
         )
 
-    return output_files
+    return {"main": output_files}
 
 
 if __name__ == "__main__":
