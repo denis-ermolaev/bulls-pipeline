@@ -34,7 +34,7 @@
 
 pipeline_steps:
   - name: prepare_data
-    engine: manage_project_files
+    engine: initial_prepare_data
     enabled: true
     redo: false
     input:
@@ -42,8 +42,17 @@ pipeline_steps:
     output_dir: "tests/data/unpacked/"
     params:
       threads: 2
+  - name: prepare_recombination_map
+    engine: convert_recombination_map
+    enabled: true
+    redo: false
+    input:
+      main: "data/genetic_maps_holstein/12711_2020_593_MOESM2_ESM.csv"
+    output_dir: "data/genetic_maps_holstein/"
+    params:
+      threads: 2
   - name: conversion_final_report_to_vcf
-    engine: vcf-converter
+    engine: vcf_converter
     enabled: true
     redo: false
     input:

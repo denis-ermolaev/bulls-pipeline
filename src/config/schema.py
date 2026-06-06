@@ -22,19 +22,7 @@ class InputError(PipelineError):
     pass
 
 
-"""
-    - name: prepare_data
-    engine: manage_project_files
-    enabled: true
-    redo: false
-    input:
-      main: "tests/data/raw/*.zip"
-    output_dir: "tests/data/unpacked/"
-    params:
-      threads: 2
-"""
-
-
+# 1. initial_prepare_data ----
 class PrepareDataStepInput(BaseModel):
     main: str
 
@@ -45,7 +33,7 @@ class PrepareDataStepParams(BaseModel):
 
 class PrepareDataStep(BaseModel):
     name: str
-    engine: Literal["manage_project_files"]
+    engine: Literal["initial_prepare_data"]
     enabled: bool
     redo: bool
     input: PrepareDataStepInput
@@ -53,6 +41,26 @@ class PrepareDataStep(BaseModel):
     params: PrepareDataStepParams
 
 
+# 1. convert_recombination_map ----
+class MAPconverterInput(BaseModel):
+    main: str
+
+
+class MAPconverterParams(BaseModel):
+    threads: int
+
+
+class MAPconverterStep(BaseModel):
+    name: str
+    engine: Literal["convert_recombination_map"]
+    enabled: bool
+    redo: bool
+    input: MAPconverterInput
+    output_dir: Path
+    params: MAPconverterParams
+
+
+# 1. vcf_converter ----
 class VCFconverterInput(BaseModel):
     main: str
 
@@ -63,7 +71,7 @@ class VCFconverterParams(BaseModel):
 
 class VCFconverterStep(BaseModel):
     name: str
-    engine: Literal["vcf-converter"]
+    engine: Literal["vcf_converter"]
     enabled: bool
     redo: bool
     input: VCFconverterInput
@@ -71,10 +79,11 @@ class VCFconverterStep(BaseModel):
     params: VCFconverterParams
 
 
+# 1. Config ----
 class Config(BaseModel):
     pipeline_steps: list[
         Annotated[
-            Union[PrepareDataStep, VCFconverterStep],
+            Union[PrepareDataStep, VCFconverterStep, MAPconverterStep],
             Field(discriminator="engine"),
         ]
     ]

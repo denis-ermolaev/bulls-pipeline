@@ -1,21 +1,20 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import csv
 import os
-import sys
 
 
-def convert_map(input_csv, output_dir="."):
+def convert_genetic_maps(
+    input: dict[str, list[str]], output_dir: str
+) -> dict[str, list[str]] | None:
     """
     Конвертирует CSV с генетической картой в набор .map-файлов по хромосомам.
     Ожидается, что CSV имеет заголовок:
     Chr,Name,Mbp_position,cM_likelihood,cM_deterministic,recrate_adjacent_deterministic,Mbp_inter_marker_distance
     """
+    input_file = input["main"][0]  # Берём первый, движок подразумевает 1 файл
     chromosomes = {}  # ключ: номер хромосомы, значение: список строк для .map
     seen_positions = set()  # для контроля уникальности (хромосома, bp)
 
-    with open(input_csv, "r", encoding="utf-8-sig") as f:
+    with open(input_file, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f, delimiter=",", quotechar='"')
         next(reader)  # пропускаем заголовок
 
@@ -63,7 +62,7 @@ def convert_map(input_csv, output_dir="."):
 
     # Создаём выходную директорию
     os.makedirs(output_dir, exist_ok=True)
-
+    output: dict[str, list[str]] = {"main": []}
     # Записываем файлы для каждой хромосомы
     for chr_id, lines in chromosomes.items():
         # Имя файла: chr1.map, chr2.map, ... chrX.map и т.д.
@@ -71,19 +70,10 @@ def convert_map(input_csv, output_dir="."):
         out_file = os.path.join(output_dir, f"chr{chr_id}.map")
         with open(out_file, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
+        output["main"].append(out_file)
         print(f"Создан {out_file} — {len(lines)} SNP")
 
-    print("Готово.")
+    return output
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(
-            "Использование: python convert_to_map.py <входной CSV> [выходная_директория]"
-        )
-        print("Пример: python convert_to_map.py genetic_map.csv ./maps/")
-        sys.exit(1)
-
-    input_csv = sys.argv[1]
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else "."
-    convert_map(input_csv, out_dir)
+# if __name__ == "__main__":

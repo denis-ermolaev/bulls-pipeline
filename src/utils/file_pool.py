@@ -13,8 +13,6 @@ def file_pool(input: dict[str, str | list[str]]):
         result = []
         for i in output:
             result.extend(i[category])
-        print(f"{output = }")
-        print(f"{result = }")
         return result
 
     full_path_input = {}
@@ -34,7 +32,6 @@ def file_pool(input: dict[str, str | list[str]]):
                     full_path.extend(glob_result)
             full_path_input[key] = [sorted(full_path)]
 
-    print(f"{full_path_input = }")
     result = []
     for key, value in full_path_input.items():
         for index, file in enumerate(value):
@@ -63,7 +60,6 @@ def file_pool(input: dict[str, str | list[str]]):
             clean_result.append(i)
         else:
             missed_count += 1
-    print(f"{clean_result = }")
     return clean_result
 
 

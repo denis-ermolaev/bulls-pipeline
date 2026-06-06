@@ -8,8 +8,9 @@ from tqdm import tqdm
 
 from src.config.config import config
 from src.config.schema import PrepareDataStep, StepsFunctionReturn, VCFconverterStep
-from src.preprocessing.main import process_file
-from src.preprocessing.manage_project_files import process_archives
+from src.engine.convert_genetic_maps import convert_genetic_maps
+from src.engine.initial_prepare_data import process_archives
+from src.engine.vcf_converter import process_file
 from src.utils.file_pool import file_pool as make_file_pool
 from src.utils.fingerprint import fingerprint
 
@@ -80,7 +81,6 @@ def worker(input, func, step, **kwargs):
 
 
 def steps_decorator(func):
-    # def wrapper(step, worker):
     def wrapper(step):
         if not step.output_dir.exists():
             step.output_dir.mkdir(parents=True, exist_ok=True)
@@ -98,7 +98,6 @@ def steps_decorator(func):
                 desc=data.desc,
             ):
                 output_files_clean.append(result)
-        # data.file_pool = cast(Any, data.file_pool)
         Path(f".cache/{step.name}/_all.json").write_text(
             json.dumps(
                 {
@@ -114,14 +113,9 @@ def steps_decorator(func):
 
 
 # 1. Подготовка данных ----
-@register("manage_project_files")
+@register("initial_prepare_data")
 @steps_decorator
 def prepare_data(step: PrepareDataStep) -> StepsFunctionReturn:
-    # file_pool = []
-
-    # for i in sorted(list(glob.glob(step.input.main))):
-    #     file_pool.append({"main": [i]})
-
     return StepsFunctionReturn(
         **{
             "file_pool": make_file_pool(step.input.model_dump()),
@@ -131,18 +125,27 @@ def prepare_data(step: PrepareDataStep) -> StepsFunctionReturn:
     )
 
 
+## 1.2 Конвертация в VCF ----
+@register("convert_recombination_map")
+@steps_decorator
+def convert_recombination_map(
+    step,
+) -> StepsFunctionReturn:
+    return StepsFunctionReturn(
+        **{
+            "file_pool": make_file_pool(step.input.model_dump()),
+            "desc": "Конвертация карты рекомбинации",
+            "func": convert_genetic_maps,
+        }
+    )
+
+
 # 2. Конвертация в VCF ----
-
-
-@register("vcf-converter")
+@register("vcf_converter")
 @steps_decorator
 def conversion_final_report_to_vcf(
     step: VCFconverterStep,
 ) -> StepsFunctionReturn:
-    """
-    Подготовка данных с помощью многопоточности
-    """
-
     return StepsFunctionReturn(
         **{
             "file_pool": make_file_pool(step.input.model_dump()),
@@ -158,8 +161,8 @@ if __name__ == "__main__":
         format="\n%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    logging.getLogger("src.preprocessing.main").disabled = True
-    logging.getLogger("src.preprocessing.manage_project_files").disabled = True
+    logging.getLogger("src.engine.initial_prepare_data").disabled = True
+    logging.getLogger("src.engine.vcf_converter").disabled = True
 
     if not Path(".cache").exists():
         Path(".cache").mkdir()
@@ -169,4 +172,4 @@ if __name__ == "__main__":
             handler = STEP_HANDLERS[step.engine]
             handler(step)
         else:
-            logging.error(f"Ф-и обработчика для {step.name} не существует")
+            logging.error(f"Ф-и обработчика для {step.engine} не существует")
