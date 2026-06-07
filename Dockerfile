@@ -19,7 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-jre \
     # Рантайм для параллельных вычислений OpenMP (нужен REGENIE):
     libgomp1 \
+    # ssh
+    openssh-server \
     && rm -rf /var/lib/apt/lists/*
+
+
 
 # Фиксируем версию uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
@@ -66,4 +70,13 @@ RUN mkdir -p /opt/tools/bin /opt/tools/samtools-1.16 \
 # Добавляем /app/bin в PATH, чтобы система видела regenie, magma, plink
 ENV PATH="/app/bin:${PATH}"
 
-CMD ["/bin/bash"]
+# Починка русских символов внутри контейнера
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Открытие ssh порта
+EXPOSE 22
+
+# CMD ["/bin/bash"]
+# Запуск ssh
+CMD ["/usr/sbin/sshd", "-D", "-e"]

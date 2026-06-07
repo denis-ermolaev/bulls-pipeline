@@ -1,6 +1,7 @@
 IMAGE_NAME = bulls-pipeline
 CONTAINER_NAME = bulls-pipeline
 
+
 # Автоматическая проверка: если мы на сервере (есть папка /scratch), добавляем флаг групп.
 FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"; fi)
 
@@ -26,11 +27,27 @@ project_preparation:
 build:
 	podman build -t $(IMAGE_NAME) .
 
-## Запустить контейнер
+
 run_container: stop
 	podman run -d \
 		--name $(CONTAINER_NAME) \
 		$(FLAGS) \
+		-v .:/app \
+		-it \
+		$(IMAGE_NAME)
+
+## Запустить контейнер
+run_container_with_ssh: stop
+	@PORT=$$((20000 + $$(id -u))); \
+	echo "Using port $$PORT"; \
+	podman run -d \
+		--name $(CONTAINER_NAME) \
+		$(FLAGS) \
+		-p 127.0.0.1:$$PORT:22 \
+		-v ~/.ssh/authorized_keys:/root/.ssh/authorized_keys:ro \
+		-v ~/.gitconfig:/root/.gitconfig:ro \
+		-v ~/.git-credentials:/home/developer/.git-credentials:ro \
+		-v dev-root:/root \
 		-v .:/app \
 		-it \
 		$(IMAGE_NAME)
