@@ -19,6 +19,7 @@ LOCAL_PATHS = [
     "data/manifest",
     "data/old_reference",
     "data/ref_panel",
+    "data/ref_panel_test",
     "data/reference",
     "data/usa_bulls",
     "data/Animal_QTLdb_release59_cattleARS_UCD2.bed.gz",

@@ -24,7 +24,7 @@ SELECTED_PATHS = [
     "data/manifest/BovineHD_B1.csv",
     "data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna",
     "data/reference/ncbi_dataset/data/GCF_002263795.3/GCF_002263795.3_ARS-UCD2.0_genomic.fna.fai",
-    "data/ref_panel/Chr24_phased_snp.vcf.gz",
+    "data/ref_panel_test/**",
     "data/bulls-pipeline.tar",
 ]
 # Если нужно загрузить всю папку data рекурсивно: "data/**"

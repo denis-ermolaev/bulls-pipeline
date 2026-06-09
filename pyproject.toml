@@ -45,5 +45,5 @@ ignore = ["E501"]
 addopts = [
     "-p no:cacheprovider", # Не создавать кэш
 ]
-testpaths = ["tests"] # Искать тесты в папке tests
+testpaths = ["tests/pytest"] # Искать тесты в папке tests
 python_files = ["*_test.py", "*_tests.py"] # 001_simple_test.py
