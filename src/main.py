@@ -125,7 +125,6 @@ def prepare_data(step: PrepareDataStep) -> StepsFunctionReturn:
     )
 
 
-## 1.2 Конвертация в VCF ----
 @register("convert_recombination_map")
 @steps_decorator
 def convert_recombination_map(

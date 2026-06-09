@@ -10,3 +10,5 @@ notebooks/archive/**
 .*_cache
 .cache
 .gitattributes
+tests/preparation_data/temp/**
+**/**/temp

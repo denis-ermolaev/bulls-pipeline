@@ -1,5 +1,6 @@
 # Полезные команды
 ```bash
+# Или zless для архивированных
 less -SN файл-для-чтения
 ```
 `-S` - видно строки
@@ -38,7 +39,7 @@ tmux kill-server
 # Настройки
 ## История
 ```bash
-#.bashrc
+#~/.bashrc
 # История
 HISTSIZE=10000
 HISTFILESIZE=20000

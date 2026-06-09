@@ -5,7 +5,7 @@ CONTAINER_NAME = bulls-pipeline
 # Автоматическая проверка: если мы на сервере (есть папка /scratch), добавляем флаг групп.
 FLAGS = $(shell if [ -d /scratch/storageA ]; then echo "--group-add keep-groups"; fi)
 
-.PHONY: run_container run_jupyter stop enter run_pipeline
+.PHONY: run_container_with_ssh run_container run_jupyter stop enter run_pipeline
 
 
 ### Подготовка окружения
@@ -28,6 +28,7 @@ build:
 	podman build -t $(IMAGE_NAME) .
 
 
+## Запустить контейнер для запуска скриптов пайплайна
 run_container: stop
 	podman run -d \
 		--name $(CONTAINER_NAME) \
@@ -36,7 +37,8 @@ run_container: stop
 		-it \
 		$(IMAGE_NAME)
 
-## Запустить контейнер
+## Запустить контейнер с ssh для разработки внутри контейнера
+# Подтягивает ssh ключи для авторизации, информацию от git с хоста
 run_container_with_ssh: stop
 	@PORT=$$((20000 + $$(id -u))); \
 	echo "Using port $$PORT"; \
@@ -49,13 +51,20 @@ run_container_with_ssh: stop
 		-v ~/.git-credentials:/home/developer/.git-credentials:ro \
 		-v dev-root:/root \
 		-v .:/app \
+		-v venv_volume:/app/.venv \
+		--restart=unless-stopped \
 		-it \
 		$(IMAGE_NAME)
+
+## Отчистить постоянные тома для dev-контейнера с ssh
+clean_persistent_volumes_container_with_ssh:
+	podman volume rm dev-root
+	podman volume rm venv_volume
 
 ## Запустить Jupyter сервер внутри контейнера
 run_jupyter:
 	podman run --rm -it \
-		-p 127.0.0.1:8888:8888 \
+		-p 127.0.0.1::8888
 		$(FLAGS) \
 		-v .:/app \
 		$(IMAGE_NAME) \
@@ -85,7 +94,7 @@ status:
 
 ## Потребление ресурсов контейнером
 stats:
-	podman stats $(CONTAINER_NAME)
+	podman stats --no-stream $(CONTAINER_NAME)
 
 ## Удалить неиспользуемые образы
 clean:
@@ -107,23 +116,11 @@ install:
 run_pipeline:
 	podman exec $(CONTAINER_NAME) uv run -m src.main
 
-
-# run_prepare_files: install
-# 	podman exec $(CONTAINER_NAME) python src/preprocessing/manage_project_files.py
-
-
-# run_tools_bash: install
-# 	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_bash.py
-
-
-# run_tools_ensembl: install
-# 	podman exec $(CONTAINER_NAME) python src/preprocessing/tools_ensembl.py
-
 # ---------------------------------------------------------------------------- #
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-#                                      DEV                                     #
+#                                   DEV HOST                                   #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 ### Разработка(HOST)
 ## Установить/обновить зависимости на хосте
@@ -139,7 +136,7 @@ pre-commit-install_host:
 	uv run pre-commit install
 
 ## Запуск тестов
-test: build
+test_host: build
 	podman run --rm \
 		$(FLAGS) \
 		-v .:/app \
@@ -162,7 +159,7 @@ requirements_host:
 
 
 ## Сохранить образ в архив
-publish_save_container:
+publish_save_container_host:
 	rm -f data/bulls-pipeline.tar
 	podman save -o data/$(IMAGE_NAME).tar $(IMAGE_NAME):latest
 
